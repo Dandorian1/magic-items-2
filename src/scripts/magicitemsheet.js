@@ -7,6 +7,8 @@ import Logger from "./lib/Logger.js";
 
 const magicItemSheets = [];
 
+const renderTemplateV2 = foundry.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
+
 export class MagicItemSheet {
   /**
    * Crete and register an instance of a MagicItemSheet, if not already present,
@@ -111,7 +113,7 @@ export class MagicItemSheet {
    * @returns {Promise<void>}
    */
   async renderTemplate(filename, cls, tab, listName) {
-    let template = await renderTemplate(`modules/${CONSTANTS.MODULE_ID}/templates/${filename}`, this.actor);
+    let template = await renderTemplateV2(`modules/${CONSTANTS.MODULE_ID}/templates/${filename}`, this.actor);
     let el = this.html.find(`.${cls}`);
     if (el.length) {
       el.replaceWith(template);

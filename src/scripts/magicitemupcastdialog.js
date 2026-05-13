@@ -1,5 +1,7 @@
 import CONSTANTS from "./constants/constants.js";
 
+const renderTemplateV2 = foundry.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
+
 /**
  * A specialized Dialog subclass for casting a spell item at a certain level
  * @type {Dialog}
@@ -21,7 +23,7 @@ export class MagicItemUpcastDialog extends Dialog {
   }
 
   static async create(magicItem, item) {
-    const html = await renderTemplate(`modules/${CONSTANTS.MODULE_ID}/templates/magic-item-upcast-dialog.html`, item);
+    const html = await renderTemplateV2(`modules/${CONSTANTS.MODULE_ID}/templates/magic-item-upcast-dialog.html`, item);
 
     // Create the Dialog and return as a Promise
     return new Promise((resolve, reject) => {

@@ -1,5 +1,8 @@
 import Logger from "./Logger.js";
 
+const CompendiumCollectionClass =
+  foundry.documents?.collections?.CompendiumCollection ?? globalThis.CompendiumCollection;
+
 export class RetrieveHelpers {
   /**
    *
@@ -97,7 +100,7 @@ export class RetrieveHelpers {
     if (!targetTmp) {
       throw Logger.error(`CompendiumCollection is undefined`, true, targetTmp);
     }
-    if (targetTmp instanceof CompendiumCollection) {
+    if (targetTmp instanceof CompendiumCollectionClass) {
       return targetTmp;
     }
     // This is just a patch for compatibility with others modules
@@ -108,7 +111,7 @@ export class RetrieveHelpers {
       targetTmp = targetTmp.uuid;
     }
 
-    if (targetTmp instanceof CompendiumCollection) {
+    if (targetTmp instanceof CompendiumCollectionClass) {
       return targetTmp;
     }
     if (RetrieveHelpers.stringIsUuid(targetTmp)) {
@@ -130,7 +133,7 @@ export class RetrieveHelpers {
       }
     }
     // Type checking
-    if (!(targetTmp instanceof CompendiumCollection)) {
+    if (!(targetTmp instanceof CompendiumCollectionClass)) {
       if (ignoreError) {
         Logger.warn(`Invalid CompendiumCollection`, false, targetTmp);
         return;
@@ -146,7 +149,7 @@ export class RetrieveHelpers {
     if (!targetTmp) {
       throw Logger.error(`CompendiumCollection is undefined`, true, targetTmp);
     }
-    if (targetTmp instanceof CompendiumCollection) {
+    if (targetTmp instanceof CompendiumCollectionClass) {
       return targetTmp;
     }
     // This is just a patch for compatibility with others modules
@@ -157,7 +160,7 @@ export class RetrieveHelpers {
       targetTmp = targetTmp.uuid;
     }
 
-    if (targetTmp instanceof CompendiumCollection) {
+    if (targetTmp instanceof CompendiumCollectionClass) {
       return targetTmp;
     }
     if (RetrieveHelpers.stringIsUuid(targetTmp)) {
@@ -178,7 +181,7 @@ export class RetrieveHelpers {
       }
     }
     // Type checking
-    if (!(targetTmp instanceof CompendiumCollection)) {
+    if (!(targetTmp instanceof CompendiumCollectionClass)) {
       if (ignoreError) {
         Logger.warn(`Invalid CompendiumCollection`, false, targetTmp);
         return;

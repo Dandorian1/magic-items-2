@@ -1,8 +1,15 @@
 ### 4.2.5
 #### Bugfixes
+* Removed `CONST.CHAT_MESSAGE_TYPES.OTHER` from the recharge `ChatMessage.create` payload — the constant was removed in Foundry v13 and reading it could short-circuit the post-recharge `update()` call.
 * [#194] Update to deprecated CONST property, which made the sheet possibly not-visible
 * [#170] Not applying proficiency bonus on spell attack
 * [#178] Various Babele-related fixes
+
+#### Forward-compat (Foundry v14/v15/v16)
+* Replaced the global `ItemSheet` reference in the item-tab feature detector with `foundry.appv1.sheets.ItemSheet` (removed at v15).
+* Replaced every direct `renderTemplate` call with `foundry.applications.handlebars.renderTemplate` (removed at v15) — affects `MagicItemTab`, `MagicItemSheet`, `MagicItemUpcastDialog`, and `AbstractOwnedMagicItemEntry`.
+* Replaced the global `CompendiumCollection` reference in `RetrieveHelpers` with `foundry.documents.collections.CompendiumCollection` (removed at v15).
+* Replaced every `{{#select X}}…{{/select}}` Handlebars block in `magic-item-tab.hbs` with `{{selectOptions choices selected=X}}` (the legacy helper is removed at v14).
 
 #### Features
 * [#170] Added a custom attack bonus option per spell

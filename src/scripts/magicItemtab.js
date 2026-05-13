@@ -5,6 +5,9 @@ import Logger from "./lib/Logger.js";
 
 const magicItemTabs = [];
 
+const ItemSheetClass = foundry.appv1?.sheets?.ItemSheet ?? globalThis.ItemSheet;
+const renderTemplateV2 = foundry.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
+
 export class MagicItemTab {
   static bind(app, html, item) {
     const document = app.item ?? app.document ?? item?.document ?? item?.item;
@@ -19,7 +22,7 @@ export class MagicItemTab {
   }
 
   constructor(app) {
-    if (app.setPosition && typeof ItemSheet !== "undefined" && !MagicItemTab.isApplicationV2(app)) {
+    if (app.setPosition && typeof ItemSheetClass !== "undefined" && !MagicItemTab.isApplicationV2(app)) {
       this.hack(app);
     }
     this.activate = false;
@@ -108,7 +111,7 @@ export class MagicItemTab {
       position.height = tab.isActive() && !position.height ? "auto" : position.height;
       let that = this;
       for (let i = 0; i < 100 && that; i++) {
-        if (that.constructor?.name === ItemSheet.name && typeof that.setPosition === "function") {
+        if (that.constructor?.name === ItemSheetClass.name && typeof that.setPosition === "function") {
           return that.setPosition.apply(this, [position]);
         }
         that = Object.getPrototypeOf(that);
@@ -118,7 +121,10 @@ export class MagicItemTab {
   }
 
   async render(app) {
-    let template = await renderTemplate(`modules/${CONSTANTS.MODULE_ID}/templates/magic-item-tab.hbs`, this.magicItem);
+    let template = await renderTemplateV2(
+      `modules/${CONSTANTS.MODULE_ID}/templates/magic-item-tab.hbs`,
+      this.magicItem,
+    );
     let el = this.html.find(`.magicitems-content`);
     if (el.length) {
       el.replaceWith(template);
