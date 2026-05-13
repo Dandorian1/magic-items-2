@@ -1,7 +1,7 @@
-import { MAGICITEMS } from "../config";
-import Logger from "../lib/Logger";
-import { MagicItemHelpers } from "../magic-item-helpers";
-import { AbstractMagicItemEntry } from "./AbstractMagicItemEntry";
+import { MAGICITEMS } from "../config.js";
+import Logger from "../lib/Logger.js";
+import { MagicItemHelpers } from "../magic-item-helpers.js";
+import { AbstractMagicItemEntry } from "./AbstractMagicItemEntry.js";
 
 export class MagicItemTable extends AbstractMagicItemEntry {
   entityCls() {
@@ -24,16 +24,22 @@ export class MagicItemTable extends AbstractMagicItemEntry {
       } else {
         const entity = pack.getDocument ? await pack.getDocument(id) : pack.get(id);
         if (entity) {
-          let item = (await actor.createEmbeddedDocuments("Item", [entity]))[0];
-          const chatData = await item.use({}, { createMessage: false });
-
-          if (!game.modules.get("ready-set-roll-5e")?.active) {
-            ChatMessage.create(
-              foundry.utils.mergeObject(chatData, {
-                "flags.dnd5e.itemData": item,
-              }),
-            );
-          }
+          const itemData = entity.toObject ? entity.toObject() : entity;
+          let item = (await actor.createEmbeddedDocuments("Item", [itemData]))[0];
+          await item.use(
+            {},
+            { configure: false },
+            {
+              create: !game.modules.get("ready-set-roll-5e")?.active,
+              data: {
+                flags: {
+                  dnd5e: {
+                    itemData: item.toObject ? item.toObject() : item.toJSON(),
+                  },
+                },
+              },
+            },
+          );
         }
       }
     }

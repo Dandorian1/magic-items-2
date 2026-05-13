@@ -1,12 +1,13 @@
-import { AbstractOwnedMagicItemEntry } from "./AbstractOwnedMagicItemEntry";
-import { MagicItemHelpers } from "../magic-item-helpers";
+import { AbstractOwnedMagicItemEntry } from "./AbstractOwnedMagicItemEntry.js";
+import { MagicItemHelpers } from "../magic-item-helpers.js";
 
 export class OwnedMagicItemFeat extends AbstractOwnedMagicItemEntry {
   async roll() {
     let consumption = this.item.consumption;
 
     if (!this.ownedItem) {
-      let data = await this.item.data();
+      const sourceItem = await this.item.entity();
+      let data = sourceItem.toObject ? sourceItem.toObject() : sourceItem.toJSON();
 
       data = foundry.utils.mergeObject(data, {
         "system.uses": null,
@@ -47,12 +48,20 @@ export class OwnedMagicItemFeat extends AbstractOwnedMagicItemEntry {
         feat.prepareFinalAttributes();
       }
       let chatData = await feat.use(
-        {},
         {
-          createMessage: true,
-          configureDialog: false,
-          flags: {
-            "dnd5e.itemData": this.ownedItem.toJSON(),
+          consume: false,
+        },
+        {
+          configure: false,
+        },
+        {
+          create: true,
+          data: {
+            flags: {
+              dnd5e: {
+                itemData: this.ownedItem.toObject ? this.ownedItem.toObject() : this.ownedItem.toJSON(),
+              },
+            },
           },
         },
       );

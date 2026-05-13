@@ -375,6 +375,7 @@ export class MagicItem {
   }
 
   async updateInternalCharges(isChecked, item) {
+    this.internal = isChecked;
     let itemData = await RetrieveHelpers.getItemAsync(item);
     const itemChargeData = itemData.system.uses;
     if (isChecked && itemChargeData?.per) {

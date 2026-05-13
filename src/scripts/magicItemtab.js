@@ -1,87 +1,119 @@
 import CONSTANTS from "./constants/constants.js";
 import { MagicItem } from "./magic-item/MagicItem.js";
+import { MagicItemHelpers } from "./magic-item-helpers.js";
 import Logger from "./lib/Logger.js";
 
 const magicItemTabs = [];
 
 export class MagicItemTab {
   static bind(app, html, item) {
-    if (MagicItemTab.isAcceptedItemType(item.document)) {
+    const document = app.item ?? app.document ?? item?.document ?? item?.item;
+    if (MagicItemTab.isAcceptedItemType(document)) {
       let tab = magicItemTabs[app.id];
       if (!tab) {
         tab = new MagicItemTab(app);
         magicItemTabs[app.id] = tab;
       }
-      tab.init(html, item, app);
+      tab.init(MagicItemHelpers.normalizeHtml(html), item, app, document);
     }
   }
 
   constructor(app) {
-    this.hack(app);
+    if (app.setPosition && typeof ItemSheet !== "undefined" && !MagicItemTab.isApplicationV2(app)) {
+      this.hack(app);
+    }
     this.activate = false;
   }
 
-  init(html, data, app) {
-    this.item = app.item;
-    this.html = html;
-    this.editable = data.editable;
+  init(html, data, app, document) {
+    this.item = document ?? app.item ?? app.document;
+    this.html = this.getSheetRoot(html);
+    this.editable = data?.editable ?? app.isEditable ?? this.item?.isOwner;
 
-    if (html[0].localName !== "div") {
-      html = $(html[0].parentElement.parentElement);
-    }
-    let tabs = html.find(`form nav.sheet-navigation.tabs`);
+    let tabs = this.html.find(`form nav.sheet-navigation.tabs, nav.sheet-navigation.tabs, nav.sheet-tabs.tabs`);
     if (tabs.find(`a[data-tab=${CONSTANTS.MODULE_ID}]`).length > 0) {
       return; // already initialized, duplication bug!
     }
 
-    tabs.append($(`<a class="item" data-tab="${CONSTANTS.MODULE_ID}">Magic Item</a>`));
+    const tabLink = tabs.hasClass("sheet-tabs")
+      ? $(`<a data-action="tab" data-group="primary" data-tab="${CONSTANTS.MODULE_ID}"><span>Magic Item</span></a>`)
+      : $(`<a class="item" data-tab="${CONSTANTS.MODULE_ID}">Magic Item</a>`);
+    tabs.append(tabLink);
+    tabLink.on("click", () => {
+      window.setTimeout(() => this.adjustSheetSize(app), 0);
+    });
 
-    $(html.find(`.sheet-body`)).append(
-      $(`<div class="tab magicitems" data-group="primary" data-tab="${CONSTANTS.MODULE_ID}"></div>`),
-    );
+    const tabContent = $(`<div class="tab magicitems" data-group="primary" data-tab="${CONSTANTS.MODULE_ID}"></div>`);
+    const body = this.html.find(`.sheet-body, .window-content, form`).first();
+    body.append(tabContent);
 
-    if (this.editable) {
-      const dragDrop = new DragDrop({
-        dropSelector: ".tab.magicitems",
-        permissions: {
-          dragstart: this._canDragStart.bind(app),
-          drop: this._canDragDrop.bind(app),
-        },
-        callbacks: {
-          dragstart: app._onDragStart.bind(app),
-          dragover: app._onDragOver.bind(app),
-          drop: (event) => {
-            this.activate = true;
-            MagicItemTab.onDrop({
-              event: event,
-              item: this.item,
-              magicItem: this.magicItem,
-            });
-          },
-        },
-      });
-
-      app._dragDrop.push(dragDrop);
-      dragDrop.bind(app.form);
-    }
-    const flagsData = foundry.utils.getProperty(app.item, `flags.${CONSTANTS.MODULE_ID}`);
+    const flagsData = foundry.utils.getProperty(this.item, `flags.${CONSTANTS.MODULE_ID}`);
     this.magicItem = new MagicItem(flagsData);
 
+    if (this.editable) {
+      if (app._dragDrop && app.form && app._onDragStart && app._onDragOver) {
+        const dragDrop = new DragDrop({
+          dropSelector: ".tab.magicitems",
+          permissions: {
+            dragstart: this._canDragStart.bind(app),
+            drop: this._canDragDrop.bind(app),
+          },
+          callbacks: {
+            dragstart: app._onDragStart.bind(app),
+            dragover: app._onDragOver.bind(app),
+            drop: (event) => {
+              this.activate = true;
+              MagicItemTab.onDrop({
+                event: event,
+                item: this.item,
+                magicItem: this.magicItem,
+              });
+            },
+          },
+        });
+
+        app._dragDrop.push(dragDrop);
+        dragDrop.bind(app.form);
+      } else {
+        MagicItemTab.activateDropTarget(tabContent[0], {
+          item: this.item,
+          magicItem: this.magicItem,
+          onDrop: () => {
+            this.activate = true;
+          },
+        });
+      }
+    }
     this.render(app);
   }
 
+  getSheetRoot(html) {
+    const root = MagicItemHelpers.normalizeHtml(html);
+    if (root.find(`nav.sheet-navigation.tabs, nav.sheet-tabs.tabs`).length) {
+      return root;
+    }
+    const closest = root.closest(`.application, .app, .window-app`);
+    return closest.length ? closest : root;
+  }
+
+  static isApplicationV2(app) {
+    const applicationV2 = foundry?.applications?.api?.ApplicationV2;
+    return Boolean(applicationV2 && app instanceof applicationV2);
+  }
+
   hack(app) {
-    let tab = this;
+    const originalSetPosition = app.setPosition.bind(app);
+    const tab = this;
     app.setPosition = function (position = {}) {
       position.height = tab.isActive() && !position.height ? "auto" : position.height;
       let that = this;
-      for (let i = 0; i < 100; i++) {
-        if (that.constructor.name === ItemSheet.name) {
-          break;
+      for (let i = 0; i < 100 && that; i++) {
+        if (that.constructor?.name === ItemSheet.name && typeof that.setPosition === "function") {
+          return that.setPosition.apply(this, [position]);
         }
         that = Object.getPrototypeOf(that);
       }
-      return that.setPosition.apply(this, [position]);
+      return originalSetPosition(position);
     };
   }
 
@@ -109,15 +141,48 @@ export class MagicItemTab {
     }
 
     if (this.activate && !this.isActive()) {
-      app._tabs[0].activate(`${CONSTANTS.MODULE_ID}`);
-      app.setPosition();
+      if (app.changeTab) {
+        app.changeTab(CONSTANTS.MODULE_ID, "primary");
+      } else {
+        app._tabs?.[0]?.activate(`${CONSTANTS.MODULE_ID}`);
+      }
+      this.adjustSheetSize(app);
+    }
+
+    if (this.isActive()) {
+      this.adjustSheetSize(app);
     }
 
     this.activate = false;
   }
 
   isActive() {
-    return $(this.html).find(`a.item[data-tab="${CONSTANTS.MODULE_ID}"]`).hasClass("active");
+    return (
+      $(this.html).find(`a.item[data-tab="${CONSTANTS.MODULE_ID}"]`).hasClass("active") ||
+      $(this.html).find(`[data-tab="${CONSTANTS.MODULE_ID}"].active`).length > 0 ||
+      $(this.html).find(`[data-tab="${CONSTANTS.MODULE_ID}"][aria-selected="true"]`).length > 0
+    );
+  }
+
+  adjustSheetSize(app) {
+    if (!app?.setPosition) {
+      return;
+    }
+
+    const hasMagicItemRows = this.html.find(".magicitems-entry-row, .magic-item-list .item").length > 0;
+    const targetWidth = hasMagicItemRows ? 1040 : 760;
+    const currentWidth = app.position?.width ?? app.element?.offsetWidth ?? app.element?.[0]?.offsetWidth ?? 0;
+    const viewportWidth = window.innerWidth ?? document.documentElement?.clientWidth ?? targetWidth;
+    const maxWidth = Math.max(700, viewportWidth - 32);
+    const width = Math.min(Math.max(currentWidth, targetWidth), maxWidth);
+
+    if (width > currentWidth + 8) {
+      app.setPosition({ width });
+    } else {
+      app.setPosition();
+    }
+
+    this.html.find(".window-content, .tab.magicitems, .magicitems-content").scrollLeft(0);
   }
 
   _canDragDrop() {
@@ -153,18 +218,29 @@ export class MagicItemTab {
    */
   static async onDrop({ event, item, magicItem }) {
     event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
 
-    let data;
+    const data = MagicItemTab.getDropData(event);
+    return MagicItemTab.onDropData({ data, item, magicItem });
+  }
+
+  static async onDropData({ data, item, magicItem }) {
+    if (!data || !magicItem.support(data.type)) {
+      return false;
+    }
+
+    let entity;
     try {
-      data = JSON.parse(event.dataTransfer.getData("text/plain"));
-      if (!magicItem.support(data.type)) {
-        return;
-      }
+      entity = await fromUuid(data.uuid);
     } catch (err) {
       return false;
     }
 
-    const entity = await fromUuid(data.uuid);
+    if (!entity) {
+      return false;
+    }
+
     const pack = entity.pack ? entity.pack : "world";
 
     if (entity && magicItem.compatible(entity)) {
@@ -174,7 +250,60 @@ export class MagicItemTab {
           [CONSTANTS.MODULE_ID]: magicItem.serializeData(),
         },
       });
+      return true;
     }
+    return false;
+  }
+
+  static getDropData(event) {
+    const textEditor =
+      foundry?.applications?.ux?.TextEditor?.implementation ?? (typeof TextEditor !== "undefined" ? TextEditor : null);
+    if (textEditor?.getDragEventData) {
+      return textEditor.getDragEventData(event);
+    }
+
+    const rawData = event.dataTransfer?.getData("application/json") || event.dataTransfer?.getData("text/plain");
+    try {
+      return JSON.parse(rawData);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  static activateDropTarget(element, { item, magicItem, onDrop = null }) {
+    if (!element) {
+      return;
+    }
+
+    element.addEventListener(
+      "dragover",
+      (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      },
+      true,
+    );
+    element.addEventListener(
+      "drop",
+      (event) => {
+        onDrop?.();
+        MagicItemTab.onDrop({ event, item, magicItem });
+      },
+      true,
+    );
+  }
+
+  static isMagicItemTabActive(app) {
+    const element = app?.element?.jquery ? app.element[0] : app?.element;
+    if (!element) {
+      return false;
+    }
+
+    return Boolean(
+      element.querySelector(
+        `[data-tab="${CONSTANTS.MODULE_ID}"].active, [data-tab="${CONSTANTS.MODULE_ID}"][aria-selected="true"], .tab.magicitems.active`,
+      ),
+    );
   }
 
   /**

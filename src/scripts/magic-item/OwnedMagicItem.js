@@ -1,12 +1,12 @@
-import { MAGICITEMS } from "../config";
-import CONSTANTS from "../constants/constants";
-import Logger from "../lib/Logger";
-import { RetrieveHelpers } from "../lib/retrieve-helpers";
-import { MagicItemHelpers } from "../magic-item-helpers";
-import { OwnedMagicItemFeat } from "../magic-item-owned-entry/OwnedMagicItemFeat";
-import { OwnedMagicItemSpell } from "../magic-item-owned-entry/OwnedMagicItemSpell";
-import { OwnedMagicItemTable } from "../magic-item-owned-entry/OwnedMagicItemTable";
-import { MagicItem } from "./MagicItem";
+import { MAGICITEMS } from "../config.js";
+import CONSTANTS from "../constants/constants.js";
+import Logger from "../lib/Logger.js";
+import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
+import { MagicItemHelpers } from "../magic-item-helpers.js";
+import { OwnedMagicItemFeat } from "../magic-item-owned-entry/OwnedMagicItemFeat.js";
+import { OwnedMagicItemSpell } from "../magic-item-owned-entry/OwnedMagicItemSpell.js";
+import { OwnedMagicItemTable } from "../magic-item-owned-entry/OwnedMagicItemTable.js";
+import { MagicItem } from "./MagicItem.js";
 
 export class OwnedMagicItem extends MagicItem {
   constructor(item, actor, magicItemActor, flagsData) {
@@ -32,15 +32,6 @@ export class OwnedMagicItem extends MagicItem {
     this.ownedEntries = this.spells.map((item) => new OwnedMagicItemSpell(this, item));
     this.ownedEntries = this.ownedEntries.concat(this.feats.map((item) => new OwnedMagicItemFeat(this, item)));
     this.ownedEntries = this.ownedEntries.concat(this.tables.map((table) => new OwnedMagicItemTable(this, table)));
-
-    this.instrument();
-  }
-
-  /**
-   *
-   */
-  instrument() {
-    this.item.roll = this.itemRoll(this.item.roll, this);
   }
 
   /**
@@ -66,13 +57,6 @@ export class OwnedMagicItem extends MagicItem {
       active = active && isAttuned;
     }
     return active;
-  }
-
-  itemRoll(original, me) {
-    return async function () {
-      me.triggerTables();
-      return await original.apply(me.item, arguments);
-    };
   }
 
   isFull() {
@@ -102,12 +86,9 @@ export class OwnedMagicItem extends MagicItem {
   }
 
   async consume(consumption) {
-    if (this.item.system.uses.value) {
-      const usage = Math.max(this.item.system.uses.value - consumption, 0);
-      var embeddedDocument = await RetrieveHelpers.getItemAsync(this.item);
-      embeddedDocument.update({
-        [CONSTANTS.CURRENT_CHARGES_PATH]: usage,
-      });
+    if (this.hasSystemUses()) {
+      const usage = Math.max(this.getSystemUsesValue() - consumption, 0);
+      await this.updateSystemUsesValue(usage);
       this.uses = usage;
     } else if (this.uses) {
       this.uses = Math.max(this.uses - consumption, 0);
@@ -122,6 +103,34 @@ export class OwnedMagicItem extends MagicItem {
         }
       }
     }
+  }
+
+  hasSystemUses() {
+    const uses = this.item.system?.uses;
+    return uses && uses.max !== null && uses.max !== undefined && uses.max !== "";
+  }
+
+  getSystemUsesMax() {
+    return Number(this.item.system?.uses?.max) || 0;
+  }
+
+  getSystemUsesValue() {
+    const uses = this.item.system?.uses;
+    if (Number.isFinite(Number(uses?.value))) {
+      return Number(uses.value);
+    }
+    const max = this.getSystemUsesMax();
+    const spent = Number(uses?.spent) || 0;
+    return Math.max(max - spent, 0);
+  }
+
+  async updateSystemUsesValue(value) {
+    const embeddedDocument = await RetrieveHelpers.getItemAsync(this.item);
+    const max = Number(embeddedDocument.system?.uses?.max) || this.getSystemUsesMax();
+    const spent = Math.max(max - value, 0);
+    await embeddedDocument.update({
+      [CONSTANTS.CURRENT_CHARGES_PATH]: spent,
+    });
   }
 
   async destroyed() {
@@ -240,7 +249,7 @@ export class OwnedMagicItem extends MagicItem {
         content: this.formatMessage(msg),
       });
     } else {
-      this.setUses(this.item.system.uses.value);
+      this.setUses(this.getSystemUsesValue());
     }
 
     this.update();
@@ -254,8 +263,10 @@ export class OwnedMagicItem extends MagicItem {
     return this.entryBy(itemId).ownedItem;
   }
 
-  triggerTables() {
-    this.triggeredTables.forEach((table) => table.roll());
+  async triggerTables() {
+    for (const table of this.triggeredTables) {
+      await table.roll(this.actor);
+    }
   }
 
   destroyItemEntry(entry) {

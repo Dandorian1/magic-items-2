@@ -39,7 +39,6 @@ export class MagicItemActor {
     this.listeners = [];
     this.destroyed = [];
     this.listening = true;
-    this.instrument();
     this.buildItems();
   }
 
@@ -57,61 +56,6 @@ export class MagicItemActor {
    */
   async fireChange() {
     this.listeners.forEach(async (listener) => listener());
-  }
-
-  /**
-   * Apply the aspects on the necessary actor pointcuts.
-   */
-  instrument() {
-    this.actor.getOwnedItem = this.getOwnedItem(this.actor.getOwnedItem, this);
-    this.actor.shortRest = this.shortRest(this.actor.shortRest, this);
-    this.actor.longRest = this.longRest(this.actor.longRest, this);
-  }
-
-  /**
-   *
-   * @param original
-   * @param me
-   * @returns {function(*=): *}
-   */
-  getOwnedItem(original, me) {
-    return function (id) {
-      let found = null;
-      me.items.concat(me.destroyed).forEach((item) => {
-        if (item.hasSpell(id) || item.hasFeat(id)) {
-          found = item.ownedItemBy(id);
-        }
-      });
-      return found ? found : original.apply(me.actor, arguments);
-    };
-  }
-
-  /**
-   *
-   * @param original
-   * @param me
-   * @returns {function(): *}
-   */
-  shortRest(original, me) {
-    return async function () {
-      let result = await original.apply(me.actor, arguments);
-      await me.onShortRest(result);
-      return result;
-    };
-  }
-
-  /**
-   *
-   * @param original
-   * @param me
-   * @returns {function(): *}
-   */
-  longRest(original, me) {
-    return async function () {
-      let result = await original.apply(me.actor, arguments);
-      await me.onLongRest(result);
-      return result;
-    };
   }
 
   /**
@@ -153,11 +97,11 @@ export class MagicItemActor {
    */
   async onShortRest(result) {
     if (result) {
-      this.items.forEach(async (item) => {
+      for (const item of this.items) {
         await item.onShortRest();
-        if (result.newDay) item.onNewDay();
-      });
-      this.fireChange();
+        if (result.newDay) await item.onNewDay();
+      }
+      await this.fireChange();
     }
   }
 
@@ -169,11 +113,11 @@ export class MagicItemActor {
    */
   async onLongRest(result) {
     if (result) {
-      this.items.forEach(async (item) => {
+      for (const item of this.items) {
         await item.onLongRest();
-        if (result.newDay) item.onNewDay();
-      });
-      this.fireChange();
+        if (result.newDay) await item.onNewDay();
+      }
+      await this.fireChange();
     }
   }
 

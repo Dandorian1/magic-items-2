@@ -1,125 +1,407 @@
-<div class="magicitems-content">
-  <div class="form-group">
-    <label>{{localize "MAGICITEMS.SheetEnabled"}}</label>
-    <input type="checkbox" name="flags.magicitems.enabled" {{checked enabled}} />
-    <input type="hidden" name="flags.magicitems.default" value="{{default}}" />
-  </div>
-  <div class="magic-item-enabled {{ifThen enabled '' 'hidden'}}">
-    <div class="form-group">
-      <label>{{localize "MAGICITEMS.SheetActivation"}}</label>
-      {{localize "MAGICITEMS.SheetActivationEquipped"}}
-      <input type="checkbox" name="flags.magicitems.equipped" {{checked equipped}} style="margin-right: 5px;" />
-      {{localize "MAGICITEMS.SheetActivationAttuned"}}
-      <input type="checkbox" name="flags.magicitems.attuned" {{checked attuned}} />
-      
-    </div>
-    <div class="form-group">
-      <label>{{localize "MAGICITEMS.SheetInternalCharges"}}</label>
-      <input type="checkbox" name="flags.magicitems.internal" {{checked internal}} />
-    </div>
-    <div class="form-group {{ifThen internal 'hidden' ''}}">
-      <label>{{localize "MAGICITEMS.SheetCharges"}}</label>
-      <div class="form-fields" style="flex: 1">
-        <input class="magic-item-charges" type="text" name="flags.magicitems.charges" value="{{charges}}" {{disabled (eq internal true)}}/>
-        <select name="flags.magicitems.chargeType" class="magic-item-charges-type" {{disabled (eq internal true)}}>
-          {{#select chargeType}}
-            {{#each chargeTypes as |name key|}}
-              <option value="{{key}}">{{name}}</option>
-            {{/each}}
-          {{/select}}
-        </select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label>{{ formatString (localize "MAGICITEMS.SheetDestroy") (object target=destroyTarget) }}</label>
-      <div class="form-fields">
-        <input type="checkbox" name="flags.magicitems.destroy" {{checked destroy}} style="margin: 3px 10px;" />
-        <select name="flags.magicitems.destroyCheck" class="magic-item-destroy-check" {{disabled (eq destroy false)}}>
-          {{#select destroyCheck}}
-            {{#each destroyChecks as |name key|}}
-              <option value="{{key}}">{{name}}</option>
-            {{/each}}
-          {{/select}}
-        </select>
-        <select
-          name="flags.magicitems.destroyType"
-          class="magic-item-destroy-type {{ifThen (eq chargeType 'c1') '' 'hidden'}}"
-          {{disabled (eq destroy false)}}
-        >
-          {{#select destroyType}}
-            {{#each destroyTypes as |name key|}}
-              <option value="{{key}}">{{name}}</option>
-            {{/each}}
-          {{/select}}
-        </select>
-        <input type="text" name="flags.magicitems.destroyDC" class="magic-item-destroy-dc {{ifThen (eq destroyCheck 'd3') '' 'hidden'}}" 
-              value="{{destroyDC}}" style="margin: 3px 10px;" {{disabled (eq destroy false)}} />
+<div class="magicitems-content magicitems-v13-panel">
+<style>
+  .magicitems-v13-panel {
+    box-sizing: border-box;
+    inline-size: 100%;
+    max-inline-size: 100%;
+    min-inline-size: 0;
+    padding: 0 18px 18px;
+    overflow-x: hidden;
+  }
+
+  .magicitems-v13-panel *,
+  .magicitems-v13-panel *::before,
+  .magicitems-v13-panel *::after {
+    box-sizing: border-box;
+  }
+
+  .magicitems-v13-panel .hidden {
+    display: none !important;
+  }
+
+  .magicitems-v13-panel input[type="text"],
+  .magicitems-v13-panel select {
+    inline-size: 100%;
+    min-inline-size: 0;
+    block-size: 32px;
+    padding-inline: 10px;
+    font: inherit;
+  }
+
+  .magicitems-v13-panel input[type="checkbox"] {
+    inline-size: 18px;
+    block-size: 18px;
+    margin: 0;
+  }
+
+  .magicitems-settings,
+  .magic-item-enabled {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-inline-size: 0;
+  }
+
+  .magicitems-field {
+    display: grid;
+    grid-template-columns: minmax(180px, 0.9fr) minmax(0, 1.4fr);
+    gap: 12px;
+    align-items: center;
+    min-inline-size: 0;
+  }
+
+  .magicitems-field > label {
+    min-inline-size: 0;
+    font-weight: 700;
+  }
+
+  .magicitems-field--toggle .magicitems-control {
+    justify-content: end;
+  }
+
+  .magicitems-field--stacked {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .magicitems-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-inline-size: 0;
+  }
+
+  .magicitems-inline-controls {
+    justify-content: end;
+  }
+
+  .magicitems-inline-controls label,
+  .magicitems-radio-controls label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .magicitems-two-columns {
+    display: grid;
+    grid-template-columns: minmax(90px, 1fr) minmax(130px, 1fr);
+    gap: 10px;
+  }
+
+  .magicitems-three-columns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(90px, 1fr));
+    gap: 10px;
+  }
+
+  .magicitems-destroy-controls {
+    display: grid;
+    grid-template-columns: 22px minmax(120px, 1fr) minmax(120px, 1fr) minmax(80px, 0.75fr);
+    gap: 10px;
+  }
+
+  .magicitems-destroy-controls > input[type="checkbox"] {
+    align-self: center;
+    justify-self: center;
+  }
+
+  .magicitems-radio-controls {
+    justify-content: end;
+    flex-wrap: wrap;
+  }
+
+  .magicitems-entry-section {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    margin-block-start: 8px;
+    overflow: hidden;
+    border: 1px solid rgba(159, 146, 117, 0.65);
+    border-radius: 4px;
+  }
+
+  .magicitems-entry-grid {
+    display: grid;
+    gap: 8px;
+    align-items: center;
+    min-inline-size: 0;
+  }
+
+  .magicitems-spell-grid {
+    grid-template-columns:
+      minmax(180px, 1fr)
+      minmax(60px, 0.36fr)
+      minmax(72px, 0.46fr)
+      minmax(84px, 0.56fr)
+      minmax(62px, 0.38fr)
+      minmax(86px, 0.52fr)
+      minmax(86px, 0.52fr)
+      24px;
+  }
+
+  .magicitems-feat-grid,
+  .magicitems-table-grid {
+    grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.65fr) minmax(96px, 0.4fr) 24px;
+  }
+
+  .magicitems-entry-header {
+    min-block-size: 34px;
+    padding: 6px 10px;
+    background: rgba(71, 16, 24, 0.9);
+    color: var(--color-text-light-highlight, #f5f1dc);
+    font-family: var(--dnd5e-font-roboto-condensed, inherit);
+    font-size: var(--font-size-12, 12px);
+    font-weight: 700;
+    line-height: 1.1;
+    text-transform: uppercase;
+  }
+
+  .magicitems-entry-header > * {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .magicitems-entry-header > :first-child {
+    text-align: start;
+  }
+
+  .magicitems-entry-row {
+    min-block-size: 48px;
+    padding: 6px 10px;
+    background: rgba(18, 21, 27, 0.82);
+    border-block-start: 1px solid rgba(159, 146, 117, 0.35);
+  }
+
+  .magicitems-entry-row > * {
+    min-inline-size: 0;
+  }
+
+  .magicitems-entry-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-inline-size: 0;
+  }
+
+  .magicitems-entry-name a {
+    min-inline-size: 0;
+    overflow: hidden;
+    color: inherit;
+    font-size: var(--font-size-14, 14px);
+    font-weight: 700;
+    line-height: 1.2;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    text-shadow: none;
+    white-space: nowrap;
+  }
+
+  .magicitems-entry-image {
+    display: inline-grid;
+    flex: 0 0 34px;
+    place-items: center;
+    inline-size: 34px;
+    block-size: 34px;
+    overflow: hidden;
+    background-position: center;
+    background-size: cover;
+    border: 1px solid rgba(159, 146, 117, 0.6);
+    border-radius: 4px;
+  }
+
+  .magicitems-entry-image .fa-dice-d20 {
+    display: none;
+  }
+
+  .magicitems-check-input {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 6px;
+    align-items: center;
+  }
+
+  .magicitems-entry-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .magicitems-entry-actions a {
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .magicitems-empty-drop {
+    min-block-size: 76px;
+    margin-block-start: 10px;
+    display: grid;
+    place-items: center;
+    color: var(--color-text-light-6, #c9c7b8);
+    border: 2px dashed rgba(159, 146, 117, 0.65);
+    border-radius: 4px;
+  }
+</style>
+  <input type="hidden" name="flags.magicitems.default" value="{{default}}" />
+
+  <section class="magicitems-settings" aria-label="Magic item settings">
+    <div class="magicitems-field magicitems-field--toggle">
+      <label for="magicitems-enabled">{{localize "MAGICITEMS.SheetEnabled"}}</label>
+      <div class="magicitems-control">
+        <input id="magicitems-enabled" type="checkbox" name="flags.magicitems.enabled" {{checked enabled}} />
       </div>
     </div>
 
-    <div class="form-group stacked magic-item-destroy-flavor-text {{ifThen destroy '' 'hidden'}}">
-      <label>{{localize "MAGICITEMS.SheetDestroyFlavorText"}}</label>
-      <input type="text" name="flags.magicitems.destroyFlavorText" value="{{destroyFlavorText}}" />
-    </div>
-
-    <div class="form-group {{ifThen internal 'hidden' ''}}">
-      <label>{{localize "MAGICITEMS.SheetRechargeable"}}</label>
-      <input type="checkbox" name="flags.magicitems.rechargeable" {{checked rechargeable}} />
-    </div>
-    <div class="form-group magic-item-recharge {{ifThen rechargeable '' 'hidden'}}">
-      <label>{{localize "MAGICITEMS.SheetRecharge"}}</label>
-      <div class="form-fields">
-        <input
-          type="text"
-          name="flags.magicitems.recharge"
-          value="{{recharge}}"
-          class="magic-item-recharge"
-          {{disabled (eq rechargeType "t3")}}
-        />
-        <select name="flags.magicitems.rechargeType">
-          {{#select rechargeType}}
-            {{#each rechargeTypes as |name key|}}
-              <option value="{{key}}">{{name}}</option>
-            {{/each}}
-          {{/select}}
-        </select>
-        <select name="flags.magicitems.rechargeUnit">
-          {{#select rechargeUnit}}
-            {{#each rechargeUnits as |name key|}}
-              <option value="{{key}}">{{name}}</option>
-            {{/each}}
-          {{/select}}
-        </select>
+    <div class="magic-item-enabled {{ifThen enabled '' 'hidden'}}">
+      <div class="magicitems-field">
+        <label>{{localize "MAGICITEMS.SheetActivation"}}</label>
+        <div class="magicitems-control magicitems-inline-controls">
+          <label>
+            <span>{{localize "MAGICITEMS.SheetActivationEquipped"}}</span>
+            <input type="checkbox" name="flags.magicitems.equipped" {{checked equipped}} />
+          </label>
+          <label>
+            <span>{{localize "MAGICITEMS.SheetActivationAttuned"}}</span>
+            <input type="checkbox" name="flags.magicitems.attuned" {{checked attuned}} />
+          </label>
+        </div>
       </div>
-    </div>
-    <div class="form-group magic-item-sort">
-      <label>{{localize "MAGICITEMS.SheetSortingMode"}}</label>
-      <div class="form-fields" style="justify-content: flex-end">
-        {{radioBoxes "flags.magicitems.sorting" sortingModes checked=sorting localize=true}}
-      </div>
-    </div>
 
-    {{#if spells.length}}
-      <ol class="magic-item-list items-list">
-        <li class="items-header flexrow">
-          <h3 class="item-name flexrow">{{localize "MAGICITEMS.SheetSpell"}}</h3>
-          <div class="item-detail spell-level-head">{{localize "MAGICITEMS.SheetLevel"}}</div>
-          <div class="item-detail spell-consumption-head">{{localize "MAGICITEMS.SheetConsumption"}}</div>
-          <div class="item-detail spell-upcast-head">{{localize "MAGICITEMS.SheetUpcast"}}</div>
-          <div class="item-detail spell-cost-head">{{localize "MAGICITEMS.SheetCost"}}</div>
-          <div class="item-detail spell-dc-head">{{localize "MAGICITEMS.SheetSaveDC"}}</div>
-          <div class="item-detail spell-atk-bonus">{{localize "MAGICITEMS.SheetAttackBonus"}}</div>
-          <div class="item-controls spell-controls-head">&nbsp;</div>
-        </li>
-        <ol class="item-list">
+      <div class="magicitems-field magicitems-field--toggle">
+        <label for="magicitems-internal">{{localize "MAGICITEMS.SheetInternalCharges"}}</label>
+        <div class="magicitems-control">
+          <input id="magicitems-internal" type="checkbox" name="flags.magicitems.internal" {{checked internal}} />
+        </div>
+      </div>
+
+      <div class="magicitems-field {{ifThen internal 'hidden' ''}}">
+        <label>{{localize "MAGICITEMS.SheetCharges"}}</label>
+        <div class="magicitems-control magicitems-two-columns">
+          <input
+            class="magic-item-charges"
+            type="text"
+            name="flags.magicitems.charges"
+            value="{{charges}}"
+            {{disabled (eq internal true)}}
+          />
+          <select name="flags.magicitems.chargeType" class="magic-item-charges-type" {{disabled (eq internal true)}}>
+            {{#select chargeType}}
+              {{#each chargeTypes as |name key|}}
+                <option value="{{key}}">{{name}}</option>
+              {{/each}}
+            {{/select}}
+          </select>
+        </div>
+      </div>
+
+      <div class="magicitems-field">
+        <label>{{ formatString (localize "MAGICITEMS.SheetDestroy") (object target=destroyTarget) }}</label>
+        <div class="magicitems-control magicitems-destroy-controls">
+          <input type="checkbox" name="flags.magicitems.destroy" {{checked destroy}} />
+          <select name="flags.magicitems.destroyCheck" class="magic-item-destroy-check" {{disabled (eq destroy false)}}>
+            {{#select destroyCheck}}
+              {{#each destroyChecks as |name key|}}
+                <option value="{{key}}">{{name}}</option>
+              {{/each}}
+            {{/select}}
+          </select>
+          <select
+            name="flags.magicitems.destroyType"
+            class="magic-item-destroy-type {{ifThen (eq chargeType 'c1') '' 'hidden'}}"
+            {{disabled (eq destroy false)}}
+          >
+            {{#select destroyType}}
+              {{#each destroyTypes as |name key|}}
+                <option value="{{key}}">{{name}}</option>
+              {{/each}}
+            {{/select}}
+          </select>
+          <input
+            type="text"
+            name="flags.magicitems.destroyDC"
+            class="magic-item-destroy-dc {{ifThen (eq destroyCheck 'd3') '' 'hidden'}}"
+            value="{{destroyDC}}"
+            {{disabled (eq destroy false)}}
+          />
+        </div>
+      </div>
+
+      <div class="magicitems-field magicitems-field--stacked magic-item-destroy-flavor-text {{ifThen destroy '' 'hidden'}}">
+        <label>{{localize "MAGICITEMS.SheetDestroyFlavorText"}}</label>
+        <input type="text" name="flags.magicitems.destroyFlavorText" value="{{destroyFlavorText}}" />
+      </div>
+
+      <div class="magicitems-field magicitems-field--toggle {{ifThen internal 'hidden' ''}}">
+        <label for="magicitems-rechargeable">{{localize "MAGICITEMS.SheetRechargeable"}}</label>
+        <div class="magicitems-control">
+          <input id="magicitems-rechargeable" type="checkbox" name="flags.magicitems.rechargeable" {{checked rechargeable}} />
+        </div>
+      </div>
+
+      <div class="magicitems-field magic-item-recharge {{ifThen rechargeable '' 'hidden'}}">
+        <label>{{localize "MAGICITEMS.SheetRecharge"}}</label>
+        <div class="magicitems-control magicitems-three-columns">
+          <input
+            type="text"
+            name="flags.magicitems.recharge"
+            value="{{recharge}}"
+            class="magic-item-recharge"
+            {{disabled (eq rechargeType "t3")}}
+          />
+          <select name="flags.magicitems.rechargeType">
+            {{#select rechargeType}}
+              {{#each rechargeTypes as |name key|}}
+                <option value="{{key}}">{{name}}</option>
+              {{/each}}
+            {{/select}}
+          </select>
+          <select name="flags.magicitems.rechargeUnit">
+            {{#select rechargeUnit}}
+              {{#each rechargeUnits as |name key|}}
+                <option value="{{key}}">{{name}}</option>
+              {{/each}}
+            {{/select}}
+          </select>
+        </div>
+      </div>
+
+      <div class="magicitems-field magic-item-sort">
+        <label>{{localize "MAGICITEMS.SheetSortingMode"}}</label>
+        <div class="magicitems-control magicitems-radio-controls">
+          {{radioBoxes "flags.magicitems.sorting" sortingModes checked=sorting localize=true}}
+        </div>
+      </div>
+
+      {{#if spells.length}}
+        <section class="magicitems-entry-section magicitems-spells-section" aria-label="Magic item spells">
+          <div class="magicitems-entry-grid magicitems-spell-grid magicitems-entry-header">
+            <div>{{localize "MAGICITEMS.SheetSpell"}}</div>
+            <div>{{localize "MAGICITEMS.SheetLevel"}}</div>
+            <div>{{localize "MAGICITEMS.SheetConsumption"}}</div>
+            <div>{{localize "MAGICITEMS.SheetUpcast"}}</div>
+            <div>{{localize "MAGICITEMS.SheetCost"}}</div>
+            <div>{{localize "MAGICITEMS.SheetSaveDC"}}</div>
+            <div>{{localize "MAGICITEMS.SheetAttackBonus"}}</div>
+            <div></div>
+          </div>
+
           {{#each spells as |item i|}}
-            <li class="item flexrow" 
+            <div
+              class="magicitems-entry-grid magicitems-spell-grid magicitems-entry-row"
               data-item-id="{{item.id}}"
               data-item-uuid="{{item.uuid}}"
-              {{#if item.removed}} style="background: lightcoral;"{{/if}}>
-              <div class="item-name flexrow">
-                <div class="item-image" style="background-image: url({{item.img}})"><i class="fa fa-dice-d20"></i></div>
-                <h4><a data-spell-idx="{{i}}">{{item.displayName}}</a></h4>
+              {{#if item.removed}}style="background: lightcoral;"{{/if}}
+            >
+              <div class="magicitems-entry-name">
+                <span class="magicitems-entry-image" style="background-image: url({{item.img}})">
+                  <i class="fa fa-dice-d20"></i>
+                </span>
+                <a data-spell-idx="{{i}}">{{item.displayName}}</a>
                 <input type="hidden" name="flags.magicitems.spells.{{i}}.uuid" value="{{item.uuid}}" />
                 <input type="hidden" name="flags.magicitems.spells.{{i}}.id" value="{{item.id}}" />
                 <input type="hidden" name="flags.magicitems.spells.{{i}}.name" value="{{item.name}}" />
@@ -127,7 +409,7 @@
                 <input type="hidden" name="flags.magicitems.spells.{{i}}.img" value="{{item.img}}" />
                 <input type="hidden" name="flags.magicitems.spells.{{i}}.baseLevel" value="{{item.baseLevel}}" />
               </div>
-              <div class="item-detail spell-level">
+              <div>
                 <select class="spell-level" name="flags.magicitems.spells.{{i}}.level">
                   {{#select item.level}}
                     {{#each item.levels as |name key|}}
@@ -136,7 +418,7 @@
                   {{/select}}
                 </select>
               </div>
-              <div class="item-detail spell-consumption">
+              <div>
                 <input
                   class="spell-consumption"
                   type="text"
@@ -144,7 +426,7 @@
                   value="{{item.consumption}}"
                 />
               </div>
-              <div class="item-detail spell-upcast">
+              <div>
                 <select class="spell-upcast" name="flags.magicitems.spells.{{i}}.upcast">
                   {{#select item.upcast}}
                     {{#each item.upcasts as |name key|}}
@@ -153,7 +435,7 @@
                   {{/select}}
                 </select>
               </div>
-              <div class="item-detail spell-cost">
+              <div>
                 <input
                   class="spell-cost"
                   type="text"
@@ -161,7 +443,7 @@
                   value="{{item.upcastCost}}"
                 />
               </div>
-              <div class="item-detail flexrow spell-flat-and-dc">
+              <div class="magicitems-check-input">
                 <input
                   class="spell-flat-dc"
                   type="checkbox"
@@ -176,7 +458,7 @@
                   {{enabled item.flatDc}}
                 />
               </div>
-              <div class="item-detail flexrow spell-atk-bonus">
+              <div class="magicitems-check-input">
                 <input
                   class="atk-bonus-checkbox"
                   type="checkbox"
@@ -191,41 +473,42 @@
                   {{enabled item.checkAtkBonus}}
                 />
               </div>
-              <div class="item-controls">
-                <a class="item-control item-delete item-spell" data-tooltip="Delete Spell">
+              <div class="magicitems-entry-actions">
+                <a class="item-delete item-spell" data-tooltip="Delete Spell">
                   <i class="fas fa-trash" data-spell-idx="{{i}}"></i>
                 </a>
               </div>
-            </li>
+            </div>
           {{/each}}
-        </ol>
-      </ol>
-    {{/if}}
+        </section>
+      {{/if}}
 
-    {{#if feats.length}}
-      <ol class="items-list magic-item-list">
-        <li class="items-header flexrow">
-          <h3 class="item-name flexrow">{{localize "MAGICITEMS.SheetFeat"}}</h3>
-          <div class="item-detail feat-effect-head">{{localize "MAGICITEMS.SheetEffect"}}</div>
-          <div class="item-detail feat-consumption-head">{{localize "MAGICITEMS.SheetConsumption"}}</div>
-          <div class="item-controls spell-controls-head">&nbsp;</div>
-        </li>
-        <ol class="item-list">
+      {{#if feats.length}}
+        <section class="magicitems-entry-section magicitems-feats-section" aria-label="Magic item feats">
+          <div class="magicitems-entry-grid magicitems-feat-grid magicitems-entry-header">
+            <div>{{localize "MAGICITEMS.SheetFeat"}}</div>
+            <div>{{localize "MAGICITEMS.SheetEffect"}}</div>
+            <div>{{localize "MAGICITEMS.SheetConsumption"}}</div>
+            <div></div>
+          </div>
+
           {{#each feats as |item i|}}
-            <li class="item flexrow" 
+            <div
+              class="magicitems-entry-grid magicitems-feat-grid magicitems-entry-row"
               data-item-id="{{item.id}}"
               data-item-uuid="{{item.uuid}}"
-              {{#if item.removed}} style="background: lightcoral;"{{/if}}>
-              <div class="item-name flexrow">
-                <div class="item-image" style="background-image: url({{item.img}})"></div>
-                <h4><a data-feat-idx="{{i}}">{{item.displayName}}</a></h4>
+              {{#if item.removed}}style="background: lightcoral;"{{/if}}
+            >
+              <div class="magicitems-entry-name">
+                <span class="magicitems-entry-image" style="background-image: url({{item.img}})"></span>
+                <a data-feat-idx="{{i}}">{{item.displayName}}</a>
                 <input type="hidden" name="flags.magicitems.feats.{{i}}.uuid" value="{{item.uuid}}" />
                 <input type="hidden" name="flags.magicitems.feats.{{i}}.id" value="{{item.id}}" />
                 <input type="hidden" name="flags.magicitems.feats.{{i}}.name" value="{{item.name}}" />
                 <input type="hidden" name="flags.magicitems.feats.{{i}}.pack" value="{{item.pack}}" />
                 <input type="hidden" name="flags.magicitems.feats.{{i}}.img" value="{{item.img}}" />
               </div>
-              <div class="item-detail feat-effect">
+              <div>
                 <select class="feat-effect" name="flags.magicitems.feats.{{i}}.effect">
                   {{#select item.effect}}
                     {{#each item.effects as |name key|}}
@@ -234,7 +517,7 @@
                   {{/select}}
                 </select>
               </div>
-              <div class="item-detail feat-consumption">
+              <div>
                 <input
                   class="feat-consumption"
                   type="text"
@@ -242,41 +525,42 @@
                   value="{{item.consumption}}"
                 />
               </div>
-              <div class="item-controls">
-                <a class="item-control item-delete item-feat" title="Delete Feature">
+              <div class="magicitems-entry-actions">
+                <a class="item-delete item-feat" title="Delete Feature">
                   <i class="fas fa-trash" data-feat-idx="{{i}}"></i>
                 </a>
               </div>
-            </li>
+            </div>
           {{/each}}
-        </ol>
-      </ol>
-    {{/if}}
+        </section>
+      {{/if}}
 
-    {{#if tables.length}}
-      <ol class="items-list magic-item-list">
-        <li class="items-header flexrow">
-          <h3 class="item-name flexrow">{{localize "MAGICITEMS.SheetTable"}}</h3>
-          <div class="item-detail table-usage-head">{{localize "MAGICITEMS.SheetUsage"}}</div>
-          <div class="item-detail table-consumption-head">{{localize "MAGICITEMS.SheetConsumption"}}</div>
-          <div class="item-controls spell-controls-head">&nbsp;</div>
-        </li>
-        <ol class="item-list">
+      {{#if tables.length}}
+        <section class="magicitems-entry-section magicitems-tables-section" aria-label="Magic item tables">
+          <div class="magicitems-entry-grid magicitems-table-grid magicitems-entry-header">
+            <div>{{localize "MAGICITEMS.SheetTable"}}</div>
+            <div>{{localize "MAGICITEMS.SheetUsage"}}</div>
+            <div>{{localize "MAGICITEMS.SheetConsumption"}}</div>
+            <div></div>
+          </div>
+
           {{#each tables as |item i|}}
-            <li class="item flexrow" 
+            <div
+              class="magicitems-entry-grid magicitems-table-grid magicitems-entry-row"
               data-item-id="{{item.id}}"
               data-item-uuid="{{item.id}}"
-              {{#if item.removed}} style="background: lightcoral;"{{/if}}>
-              <div class="item-name flexrow">
-                <div class="item-image" style="background-image: url({{item.img}})">{{{@root/rollIcon}}}</div>
-                <h4><a data-table-idx="{{i}}">{{item.displayName}}</a></h4>
+              {{#if item.removed}}style="background: lightcoral;"{{/if}}
+            >
+              <div class="magicitems-entry-name">
+                <span class="magicitems-entry-image" style="background-image: url({{item.img}})">{{{@root/rollIcon}}}</span>
+                <a data-table-idx="{{i}}">{{item.displayName}}</a>
                 <input type="hidden" name="flags.magicitems.tables.{{i}}.uuid" value="{{item.uuid}}" />
                 <input type="hidden" name="flags.magicitems.tables.{{i}}.id" value="{{item.id}}" />
                 <input type="hidden" name="flags.magicitems.tables.{{i}}.name" value="{{item.name}}" />
                 <input type="hidden" name="flags.magicitems.tables.{{i}}.pack" value="{{item.pack}}" />
                 <input type="hidden" name="flags.magicitems.tables.{{i}}.img" value="{{item.img}}" />
               </div>
-              <div class="item-detail table-usage">
+              <div>
                 <select class="table-usage" name="flags.magicitems.tables.{{i}}.usage">
                   {{#select item.usage}}
                     {{#each item.usages as |name key|}}
@@ -285,7 +569,7 @@
                   {{/select}}
                 </select>
               </div>
-              <div class="item-detail table-consumption">
+              <div>
                 <input
                   class="table-consumption"
                   type="text"
@@ -293,22 +577,19 @@
                   value="{{item.consumption}}"
                 />
               </div>
-              <div class="item-controls">
-                <a class="item-control item-delete item-table" title="Delete Roll Table">
+              <div class="magicitems-entry-actions">
+                <a class="item-delete item-table" title="Delete Roll Table">
                   <i class="fas fa-trash" data-table-idx="{{i}}"></i>
                 </a>
               </div>
-            </li>
+            </div>
           {{/each}}
-        </ol>
-      </ol>
-    {{/if}}
+        </section>
+      {{/if}}
 
-    {{#if empty}}
-      <li class="item flexrow">
-        <div class="spell-drag-content">{{localize "MAGICITEMS.SheetDragContent"}}</div>
-      </li>
-    {{/if}}
-
-  </div>
+      {{#if empty}}
+        <div class="spell-drag-content magicitems-empty-drop">{{localize "MAGICITEMS.SheetDragContent"}}</div>
+      {{/if}}
+    </div>
+  </section>
 </div>

@@ -1,4 +1,4 @@
-import CONSTANTS from "./constants/constants";
+import CONSTANTS from "./constants/constants.js";
 
 /**
  * A specialized Dialog subclass for casting a spell item at a certain level

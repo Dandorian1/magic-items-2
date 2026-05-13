@@ -1,4 +1,4 @@
-import { AbstractOwnedMagicItemEntry } from "./AbstractOwnedMagicItemEntry";
+import { AbstractOwnedMagicItemEntry } from "./AbstractOwnedMagicItemEntry.js";
 
 export class OwnedMagicItemTable extends AbstractOwnedMagicItemEntry {
   async roll() {

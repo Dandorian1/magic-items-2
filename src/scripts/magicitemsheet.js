@@ -17,13 +17,14 @@ export class MagicItemSheet {
    * @param data
    */
   static bind(app, html, data) {
-    if (MagicItemActor.get(app.actor.id)) {
+    const actor = app.actor ?? app.document ?? data?.actor;
+    if (actor && MagicItemActor.get(actor.id)) {
       let sheet = magicItemSheets[app.id];
       if (!sheet) {
-        sheet = new MagicItemSheet(app.actor.id);
+        sheet = new MagicItemSheet(actor.id);
         magicItemSheets[app.id] = sheet;
       }
-      sheet.init(html, data);
+      sheet.init(MagicItemHelpers.normalizeHtml(html), data);
     }
   }
 
@@ -76,21 +77,11 @@ export class MagicItemSheet {
       }
     } else {
       if (this.actor.hasItemsFeats()) {
-        await this.renderTemplate(
-          "magic-item-feat-sheet-v2.hbs",
-          "magicitems-feats-content",
-          "features",
-          "features-list",
-        );
+        await this.renderTemplate("magic-item-feat-sheet-v2.hbs", "magicitems-feats-content", "features", "items-list");
         this.html.find(".item-tooltip").each((idx, el) => this.addToolTips(el));
       }
       if (this.actor.hasItemsSpells()) {
-        await this.renderTemplate(
-          "magic-item-spell-sheet-v2.hbs",
-          "magicitems-spells-content",
-          "spells",
-          "spells-list",
-        );
+        await this.renderTemplate("magic-item-spell-sheet-v2.hbs", "magicitems-spells-content", "spells", "items-list");
         this.html.find(".item-tooltip").each((idx, el) => this.addToolTips(el));
       }
     }
@@ -99,6 +90,9 @@ export class MagicItemSheet {
       .filter((item) => item.visible)
       .forEach((item) => {
         let itemEl = this.html.find(`.inventory-list .item-list .item[data-item-id="${item.id}"]`);
+        if (!itemEl.length) {
+          itemEl = this.html.find(`.items-list .item-list .item[data-item-id="${item.id}"]`);
+        }
         let itemName = this.actor.isUsingNew5eSheet ? itemEl.find(".name .subtitle") : itemEl.find("h4");
         if (!itemName.find("i.fa-magic").length) {
           itemName.append(CONSTANTS.HTML.MAGIC_ITEM_ICON);
@@ -123,13 +117,23 @@ export class MagicItemSheet {
       el.replaceWith(template);
     } else {
       if (game.settings.get(CONSTANTS.MODULE_ID, "optionDisplayMainSheetItems") === CONSTANTS.DISPLAY_OPTIONS.BOTTOM) {
-        this.html.find(`.${tab} .${listName}`).append(template);
+        this.findSheetList(tab, listName).append(template);
       } else if (
         game.settings.get(CONSTANTS.MODULE_ID, "optionDisplayMainSheetItems") === CONSTANTS.DISPLAY_OPTIONS.TOP
       ) {
-        this.html.find(`.${tab} .${listName}`).prepend(template);
+        this.findSheetList(tab, listName).prepend(template);
       }
     }
+  }
+
+  findSheetList(tab, listName) {
+    const selectors = [
+      `.${tab} .${listName}`,
+      `[data-tab="${tab}"] .${listName}`,
+      `[data-tab="${tab}"] .items-list`,
+      `[data-tab="${tab}"] [data-item-list="${tab === "spells" ? "spell" : tab}"]`,
+    ];
+    return this.html.find(selectors.join(", ")).first();
   }
 
   /**

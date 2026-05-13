@@ -1,6 +1,6 @@
-import CONSTANTS from "../constants/constants";
-import Logger from "../lib/Logger";
-import { RetrieveHelpers } from "../lib/retrieve-helpers";
+import CONSTANTS from "../constants/constants.js";
+import Logger from "../lib/Logger.js";
+import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
 
 export class AbstractOwnedMagicItemEntry {
   constructor(magicItem, item) {

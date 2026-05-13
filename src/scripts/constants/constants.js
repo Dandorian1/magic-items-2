@@ -14,12 +14,12 @@ const CONSTANTS = {
   WEIGHT_PROPERTY_PATH: "system.weight",
   PRICE_PROPERTY_PATH: "system.price",
   SPELL_LEVEL_PROPERTY_PATH: "system.level",
-  CURRENT_CHARGES_PATH: "system.uses.value",
+  CURRENT_CHARGES_PATH: "system.uses.spent",
   DISPLAY_OPTIONS: {
     BOTTOM: 0,
     TOP: 1,
   },
 };
-CONSTANTS.PATH = `modules/${CONSTANTS.MODULE_NAME}/`;
+CONSTANTS.PATH = `modules/${CONSTANTS.MODULE_ID}/`;
 
 export default CONSTANTS;
