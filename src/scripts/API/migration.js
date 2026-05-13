@@ -35,7 +35,7 @@ const MIGRATION = {
    * @returns {Promise<void>} No Response
    */
   async updateFlagScopeMagicItem(mi) {
-    const miFlag = foundry.utils.getProperty(mi, `flags.magic-items-2`);
+    const miFlag = foundry.utils.getProperty(mi, "flags.magic-items-2");
     const miFlagNewScope = foundry.utils.getProperty(mi, `flags.${CONSTANTS.MODULE_ID}`);
     if (!isEmptyObject(miFlag) && isEmptyObject(miFlagNewScope)) {
       Logger.info(`Update flagsScope item ${mi.name}...`);
@@ -88,7 +88,7 @@ const MIGRATION = {
    */
   async updatMagicItemsOnAllActors() {
     if (game.user.isGM) {
-      Logger.info(`Updating Magic Items information on all actors`);
+      Logger.info("Updating Magic Items information on all actors");
       for (const actor of game.actors) {
         Logger.info(`Updating Magic Items on actor ${actor.name}`);
         const miFlag = actor.items.filter((i) => !!i.flags[CONSTANTS.MODULE_ID]);

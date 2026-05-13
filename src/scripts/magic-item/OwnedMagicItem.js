@@ -53,7 +53,7 @@ export class OwnedMagicItem extends MagicItem {
     if (this.attuned) {
       let isAttuned =
         this.item.system.attunement === 2 ||
-        this.item.system.attuned === true; /* this.item.system.attuned is a legacy property; can be undefined */
+        this.item.system.attuned === true; /* This.item.system.attuned is a legacy property; can be undefined */
       active = active && isAttuned;
     }
     return active;
@@ -92,7 +92,9 @@ export class OwnedMagicItem extends MagicItem {
       this.uses = usage;
     } else if (this.uses) {
       this.uses = Math.max(this.uses - consumption, 0);
-      if (!this.item.system.uses.autoDestroy) {
+      // `system.uses` is absent on items without per-item charges (e.g. some
+      // feats); optional-chain so the destroy path still runs in that case.
+      if (!this.item.system.uses?.autoDestroy) {
         if (await this.destroyed()) {
           if (this.destroyType === MAGICITEMS.DESTROY_JUST_DESTROY) {
             this.isDestroyed = true;
@@ -164,7 +166,7 @@ export class OwnedMagicItem extends MagicItem {
     }
     if (destroyed) {
       ChatMessage.create({
-        user: game.user._id,
+        user: game.user.id,
         speaker: ChatMessage.getSpeaker({ actor: this.actor }),
         content: this.formatMessage(`<b>${this.name}</b> ${this.destroyFlavorText}`),
       });
@@ -197,9 +199,9 @@ export class OwnedMagicItem extends MagicItem {
   }
 
   async doRecharge() {
-    let amount = 0,
-      updated = 0,
-      msg = `<b>Magic Item:</b> ${this.rechargeableLabel}<br>`;
+    let amount = 0;
+    let updated = 0;
+    let msg = `<b>Magic Item:</b> ${this.rechargeableLabel}<br>`;
 
     let prefix = game.i18n.localize("MAGICITEMS.SheetRechargedBy");
     let postfix = game.i18n.localize("MAGICITEMS.SheetChargesLabel");

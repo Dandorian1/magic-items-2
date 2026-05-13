@@ -5,7 +5,7 @@ import { AbstractMagicItemEntry } from "./AbstractMagicItemEntry.js";
 
 export class MagicItemTable extends AbstractMagicItemEntry {
   entityCls() {
-    return CONFIG["RollTable"];
+    return CONFIG.RollTable;
   }
 
   get usages() {

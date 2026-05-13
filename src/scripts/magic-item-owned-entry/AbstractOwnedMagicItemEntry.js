@@ -1,8 +1,7 @@
 import CONSTANTS from "../constants/constants.js";
 import Logger from "../lib/Logger.js";
 import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
-
-const renderTemplateV2 = foundry.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
+import { renderTemplate as renderTemplateV2 } from "../lib/foundry-compat.js";
 
 export class AbstractOwnedMagicItemEntry {
   constructor(magicItem, item) {
@@ -10,10 +9,6 @@ export class AbstractOwnedMagicItemEntry {
     this.item = item;
     this.uses = parseInt("uses" in this.item ? this.item.uses : this.magicItem.charges);
 
-    // Patch retrocompatbility
-    if (this.item.pack?.startsWith("magic-items")) {
-      this.item.pack = this.item.pack.replace("magic-items-2.", `${CONSTANTS.MODULE_ID}.`);
-    }
     // Generate Uuid runtime
     if (!this.item.uuid) {
       try {
@@ -113,7 +108,7 @@ export class AbstractOwnedMagicItemEntry {
     }
     if (destroyed) {
       ChatMessage.create({
-        user: game.user._id,
+        user: game.user.id,
         speaker: ChatMessage.getSpeaker({ actor: this.magicItem.actor }),
         content: this.magicItem.formatMessage(`<b>${this.name}</b> ${this.magicItem.destroyFlavorText}`),
       });
@@ -124,47 +119,56 @@ export class AbstractOwnedMagicItemEntry {
   showNoChargesMessage(callback) {
     const message = game.i18n.localize("MAGICITEMS.SheetNoChargesMessage");
     const title = game.i18n.localize("MAGICITEMS.SheetDialogTitle");
-    let d = new Dialog({
-      title: title,
+    // DialogV2 — v1 `Dialog` is deprecated since v12 and removed at v15.
+    foundry.applications.api.DialogV2.wait({
+      window: { title },
       content: `<b>'${this.magicItem.name}'</b> - ${message} <b>'${this.item.name}'</b><br><br>`,
-      buttons: {
-        use: {
-          icon: '<i class="fas fa-check"></i>',
+      buttons: [
+        {
+          action: "use",
+          icon: "fas fa-check",
           label: game.i18n.localize("MAGICITEMS.SheetDialogUseAnyway"),
-          callback: () => callback(),
+          callback: () => "use",
         },
-        close: {
-          icon: '<i class="fas fa-times"></i>',
+        {
+          action: "close",
+          icon: "fas fa-times",
           label: game.i18n.localize("MAGICITEMS.SheetDialogClose"),
-          callback: () => d.close(),
+          callback: () => "close",
         },
-      },
+      ],
       default: "close",
+      rejectClose: false,
+    }).then((action) => {
+      if (action === "use") callback();
     });
-    d.render(true);
   }
 
   activeEffectMessage(callback) {
     const message = game.i18n.localize("MAGICITEMS.ToggleActiveEffectDialogMessage");
     const title = game.i18n.localize("MAGICITEMS.ToggleActiveEffectDialogTitle");
-    let x = new Dialog({
-      title: title,
+    foundry.applications.api.DialogV2.wait({
+      window: { title },
       content: `${message}<br><br>`,
-      buttons: {
-        use: {
-          icon: '<i class="fas fa-check"></i>',
+      buttons: [
+        {
+          action: "use",
+          icon: "fas fa-check",
           label: game.i18n.localize("MAGICITEMS.ToggleActiveEffectDialogYes"),
-          callback: () => callback(),
+          callback: () => "use",
         },
-        close: {
-          icon: '<i class="fas fa-times"></i>',
+        {
+          action: "close",
+          icon: "fas fa-times",
           label: game.i18n.localize("MAGICITEMS.ToggleActiveEffectDialogNo"),
-          callback: () => x.close(),
+          callback: () => "close",
         },
-      },
+      ],
       default: "use",
+      rejectClose: false,
+    }).then((action) => {
+      if (action === "use") callback();
     });
-    x.render(true);
   }
 
   async askSummonningMessage(summonOptions) {
@@ -186,19 +190,6 @@ export class AbstractOwnedMagicItemEntry {
       },
     });
     return dialog;
-  }
-
-  computeSaveDC(item) {
-    const data = this.magicItem.actor.system;
-    data.attributes.spelldc = data.attributes.spellcasting ? data.abilities[data.attributes.spellcasting].dc : 10;
-
-    const save = item.system.save;
-    if (save?.ability) {
-      if (save.scaling === "spell") save.dc = data.attributes.spelldc;
-      else if (save.scaling !== "flat") save.dc = data.abilities[save.scaling]?.dc ?? 10;
-      const ability = CONFIG.DND5E.abilities[save.ability];
-      item.labels.save = game.i18n.format("DND5E.SaveDC", { dc: save.dc || "", ability });
-    }
   }
 
   async applyActiveEffects(item) {
@@ -238,7 +229,7 @@ export class AbstractOwnedMagicItemEntry {
       Logger.debug(`Charges: ${charges}, MaxCharges: ${maxCharges}`);
       if (charges !== 0) {
         ChatMessage.create({
-          user: game.user_id,
+          user: game.user.id,
           speaker: ChatMessage.getSpeaker({ actor: this.magicItem.actor, token: this.magicItem.actor.token }),
           content: game.i18n.format(game.i18n.localize("MAGICITEMS.ShowChargesMessage"), {
             name: this.magicItem.name,

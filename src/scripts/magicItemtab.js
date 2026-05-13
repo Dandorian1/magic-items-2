@@ -2,11 +2,14 @@ import CONSTANTS from "./constants/constants.js";
 import { MagicItem } from "./magic-item/MagicItem.js";
 import { MagicItemHelpers } from "./magic-item-helpers.js";
 import Logger from "./lib/Logger.js";
+import {
+  ItemSheetClass,
+  renderTemplate as renderTemplateV2,
+  DragDropClass,
+  TextEditorImpl,
+} from "./lib/foundry-compat.js";
 
 const magicItemTabs = [];
-
-const ItemSheetClass = foundry.appv1?.sheets?.ItemSheet ?? globalThis.ItemSheet;
-const renderTemplateV2 = foundry.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
 
 export class MagicItemTab {
   static bind(app, html, item) {
@@ -33,9 +36,9 @@ export class MagicItemTab {
     this.html = this.getSheetRoot(html);
     this.editable = data?.editable ?? app.isEditable ?? this.item?.isOwner;
 
-    let tabs = this.html.find(`form nav.sheet-navigation.tabs, nav.sheet-navigation.tabs, nav.sheet-tabs.tabs`);
+    let tabs = this.html.find("form nav.sheet-navigation.tabs, nav.sheet-navigation.tabs, nav.sheet-tabs.tabs");
     if (tabs.find(`a[data-tab=${CONSTANTS.MODULE_ID}]`).length > 0) {
-      return; // already initialized, duplication bug!
+      return; // Already initialized, duplication bug!
     }
 
     const tabLink = tabs.hasClass("sheet-tabs")
@@ -47,7 +50,7 @@ export class MagicItemTab {
     });
 
     const tabContent = $(`<div class="tab magicitems" data-group="primary" data-tab="${CONSTANTS.MODULE_ID}"></div>`);
-    const body = this.html.find(`.sheet-body, .window-content, form`).first();
+    const body = this.html.find(".sheet-body, .window-content, form").first();
     body.append(tabContent);
 
     const flagsData = foundry.utils.getProperty(this.item, `flags.${CONSTANTS.MODULE_ID}`);
@@ -55,7 +58,7 @@ export class MagicItemTab {
 
     if (this.editable) {
       if (app._dragDrop && app.form && app._onDragStart && app._onDragOver) {
-        const dragDrop = new DragDrop({
+        const dragDrop = new DragDropClass({
           dropSelector: ".tab.magicitems",
           permissions: {
             dragstart: this._canDragStart.bind(app),
@@ -92,10 +95,10 @@ export class MagicItemTab {
 
   getSheetRoot(html) {
     const root = MagicItemHelpers.normalizeHtml(html);
-    if (root.find(`nav.sheet-navigation.tabs, nav.sheet-tabs.tabs`).length) {
+    if (root.find("nav.sheet-navigation.tabs, nav.sheet-tabs.tabs").length) {
       return root;
     }
-    const closest = root.closest(`.application, .app, .window-app`);
+    const closest = root.closest(".application, .app, .window-app");
     return closest.length ? closest : root;
   }
 
@@ -104,11 +107,14 @@ export class MagicItemTab {
     return Boolean(applicationV2 && app instanceof applicationV2);
   }
 
+  // C4 in tech-debt plan — replace this prototype-walk monkey-patch in 4.4.0.
   hack(app) {
     const originalSetPosition = app.setPosition.bind(app);
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const tab = this;
     app.setPosition = function (position = {}) {
       position.height = tab.isActive() && !position.height ? "auto" : position.height;
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
       let that = this;
       for (let i = 0; i < 100 && that; i++) {
         if (that.constructor?.name === ItemSheetClass.name && typeof that.setPosition === "function") {
@@ -125,7 +131,7 @@ export class MagicItemTab {
       `modules/${CONSTANTS.MODULE_ID}/templates/magic-item-tab.hbs`,
       this.magicItem,
     );
-    let el = this.html.find(`.magicitems-content`);
+    let el = this.html.find(".magicitems-content");
     if (el.length) {
       el.replaceWith(template);
     } else {
@@ -207,6 +213,7 @@ export class MagicItemTab {
 
   /**
    * Disable all relevant inputs in the magic items tab.
+   * @param html
    */
   static disableMagicItemTabInputs(html) {
     html.find(".magicitems-content input").prop("disabled", true);
@@ -262,10 +269,8 @@ export class MagicItemTab {
   }
 
   static getDropData(event) {
-    const textEditor =
-      foundry?.applications?.ux?.TextEditor?.implementation ?? (typeof TextEditor !== "undefined" ? TextEditor : null);
-    if (textEditor?.getDragEventData) {
-      return textEditor.getDragEventData(event);
+    if (TextEditorImpl?.getDragEventData) {
+      return TextEditorImpl.getDragEventData(event);
     }
 
     const rawData = event.dataTransfer?.getData("application/json") || event.dataTransfer?.getData("text/plain");

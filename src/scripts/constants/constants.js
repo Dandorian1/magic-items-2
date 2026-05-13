@@ -1,6 +1,6 @@
 const CONSTANTS = {
   MODULE_ID: "magicitems",
-  PATH: `modules/magicitems/`,
+  PATH: "modules/magicitems/",
   PREFIX_LABEL: "MAGICITEMS",
   // PREFIX_FLAG: "magicitems",
   FLAGS: {

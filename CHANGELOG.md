@@ -1,3 +1,101 @@
+### 4.3.2
+#### Tech-debt phase 2 — CI quality gates
+
+No runtime behaviour changes for end users. This release stands up the missing CI safety net that let the 4.2.x latent-bug stack go undetected for years.
+
+* **Lint cleanup, zero-warning baseline.** `.eslintignore` previously excluded the entire `src/scripts/` tree, so `npm run lint` was a near-noop (only `src/module.js` was actually linted). Un-ignored the rest, surfaced 471 findings, auto-fixed ~404 via `prettier --write` + `eslint --fix`, fixed the residue by hand. Six latent bugs surfaced in the process: a `macroDataArr` typo in `runMacroOnExplicitActor`, an `no-inner-declarations` reordering in the same function, three `this.X = this.X` no-op self-assignments in `MagicItemSpell` / `MagicItemFeat`, and three empty-block stub hooks (`preCreateItem` / `preUpdateItem` / `preDeleteItem`) deleted. Added missing Foundry globals to the eslintrc (`globalThis`, `fromUuid`, `fromUuidSync`, `CONST`, `canvas`, `Roll`, `Journal`, `TokenDocument`, `dnd5e`, `ui`). Relaxed the noisy JSDoc rules (require-description, require-param-type, require-jsdoc) since plain-JS type annotations are imprecise and the user's "keep comments short" convention prefers them off. Disabled the stylistic eslint rules (`arrow-parens`, `keyword-spacing`, `operator-linebreak`, `space-before-function-paren`, etc.) that were re-enabled in the eslintrc but conflicted with prettier — prettier now owns formatting alone.
+* **New `.github/workflows/ci.yml`** triggered on push/PR to master + the feature branch. Runs lint with `--max-warnings 0`, prettier `--check`, `build:db`, `build`, then parses the produced bundle with `new Function(src)` to catch vite emitting invalid ES. Single Node-22 job; the build is browser-targeted so a Node matrix would have no value at this layer.
+* **Pre-release distribution flow.** The `release-creation.yml` "Publish Module to FoundryVTT Website" step is now gated on `github.event.release.prerelease == false`. Pre-releases tagged with the `<version>-test.N` convention upload the artifact to the GitHub release as normal but skip the foundryvtt.com publish, so betas don't land in the production listing. Documented in `CONTRIBUTING.md`.
+* **`CONTRIBUTING.md`** smoke-test checklist gets: a version stamp (Foundry / dnd5e / integration-module versions the checklist was last verified against), a "no `magicitems` deprecation warnings in console" final assertion on every scenario, and a "Shipping a pre-release" section explaining the tagging convention and tester-install URL pattern. Style section gets a "keep comments short" guideline.
+
+### 4.3.1
+#### Tech-debt phase 1 cleanups
+Quick-wins pass against the tech-debt audit. No behaviour changes for end users; the goal was to remove future foot-guns and merge-conflict noise.
+* **Hotbar macro** for "drop a magic-item spell on the bar" now JSON-encodes the item / spell names into the generated command instead of unsafe string interpolation. Items with apostrophes, quotes, or backslashes (e.g. `Smith's Wand`) previously produced syntactically-broken macros that had to be hand-edited.
+* `Handlebars.registerHelper` calls now prefer `foundry.applications.handlebars.registerHelper` with a fall-back to the global. v14 introduces the namespaced path; the global will be removed eventually.
+* Dropped the `magic-items-2.` → `magicitems.` pack-id retro-compat shim in `AbstractOwnedMagicItemEntry`. Predated the 4.0 module-id migration; worlds that haven't migrated by now never will.
+* Removed eight dead `dependencies` from `package.json` (`@fortawesome/*`, `@rollup/plugin-node-resolve` duplicate, `@typhonjs-fvtt/svelte-standard`, `moment`, `svelte-select`, `svelte-virtual-scroll-list`) and the matching `#standard/*` import alias. No source files reference any of them — vestigial from an early UI prototype. Build & runtime untouched.
+
+#### CI / release pipeline
+* **`src/packs/<pack-name>/*` LevelDB binaries are no longer tracked in git.** The canonical source for each compendium pack lives under `src/packs/_source/<pack-name>/*.json`; the binaries are now rebuilt by a new `npm run build:db` step in `.github/workflows/release-creation.yml` before zipping the release artifact. Stops meaningless merge conflicts on `LOG`/`MANIFEST-*`/`*.ldb` and stops accidentally shipping a stale DB that doesn't match the JSON sources.
+* Cleaned up ~80 lines of commented-out alternate workflow variants in `release-creation.yml`.
+
+#### Documentation
+* `README.md` — added an Argon HUD / midi-qol / chris-premades compatibility row + a dedicated "Argon HUD integration" section describing what the integration does and how it's layered onto Argon (libWrapper + render hooks, no source-file edits).
+* New `CONTRIBUTING.md` — dev-loop setup (`npm run build:watch`, symlinking `dist/` into Foundry's modules folder), build-script reference, project layout, and a smoke-test checklist for the midi-qol + chris-premades + Argon integration surface.
+
+### 4.3.0
+#### dnd5e 5.x activities-aware cast path (D1–D3)
+Per-spell **flat DC**, **custom attack bonus**, and **cantrip no-scaling** overrides were silently being dropped on any spell that ships with the dnd5e 5.x activities system (which is essentially every SRD spell from dnd5e 5.0+). The old `buildSpellData()` only patched top-level `system.save`, `system.actionType`, and `system.scaling` — fields that no longer exist on the 5.x spell schema (verified against `dnd5e/module/data/item/spell.mjs` at `release-5.3.3`).
+* **Flat DC override** now also sets `activity.save.dc = {calculation: "", formula: "<dc>"}` on each save activity. Empty calculation switches dnd5e's data prep into "use the formula value" mode; the formula is read deterministically into `dc.value` at workflow time.
+* **Custom spell-attack bonus** now also appends to each attack activity's `attack.bonus` (a FormulaField). Both per-spell-config bonuses and the proficiency-bonus fallback (when no per-spell bonus is set) apply.
+* **Cantrip no-scaling** now also zeroes each damage activity's `damage.parts[*].scaling.mode = ""`, which dnd5e's `_scaleDamage` interprets as "skip the upcast multiplier" and returns the base formula unchanged. Removed the obsolete post-create `await spell.update({"system.scaling": "none"})` (no-op on 5.x).
+* Legacy `system.*` patches are kept as a fallback branch for any pre-5.x compendium content still in worlds — they're inert on 5.x spells but harmless.
+
+#### Ecosystem integration hardening
+* **Argon HUD source cache** now invalidates on `updateItem`/`deleteItem` for spell-type items, so a GM editing a compendium spell mid-session sees the new tooltip data on the next hover instead of stale 5.3-era cached state. (E1.)
+* **Midi mid-stride cleanup** for the transient embedded spell now defers if midi-qol still has a Workflow active for one of our activity UUIDs at the 30s timeout point. Retries every 30s up to three times before forcing deletion; the `ready`-time orphan sweep remains the backstop. Prevents an item from being deleted out from under a slow workflow (large effect stacks, network jitter, GM reviewing damage cards). (E4.)
+* **Tidy5e API constant reads** are now wrapped in a `tidyConst(api, "PATH")` helper that warns once to console if Tidy renames a constant. The old code would interpolate `undefined` into selector strings and silently inject nothing. (E3.)
+
+#### Forward-compat
+* **Transient-spell filter** now also subscribes to `renderCharacterActorSheet` / `renderNPCActorSheet` (the dnd5e 5.x ApplicationV2 sheet hook names) in addition to the legacy `renderActorSheet5eCharacter`/`NPC` v1 names. (F3.)
+* **`MagicItemUpcastDialog`** migrated from v1 `Dialog` subclass to `foundry.applications.api.DialogV2.wait(...)`. Dynamic level→consumption re-computation now wires off the `render` hook DialogV2 fires after attaching content. Returns `null` (instead of rejecting) on user dismiss; cast path now bails cleanly in that case. (F1, follow-up to the 4.2.18 Dialog cleanup.)
+* **`itemTmp.ownership.default = LIMITED`** in-place mutation removed from `MagicItemSheet.onItemShow`. v13 stricter data-prep cycles ignore unpersisted ownership mutations; replaced with `sheet.render({ force: true, editable: itemTmp.isOwner })`, which gives non-owners a read-only render via the canonical API. (F8.)
+
+#### Style
+* Hoisted `renderTemplate` / `ItemSheetClass` / `DragDropClass` / `TextEditorImpl` / `CompendiumCollectionClass` shims into a single `src/scripts/lib/foundry-compat.js` so the four files that needed them can share one declaration. No behaviour change.
+
+### 4.2.18
+#### Bugfixes (latent)
+Top-down audit pass for Foundry v13.351 + dnd5e 5.3.3. Fixed six latent bugs sitting in production code on cold paths, plus replaced the last v1 `Dialog`/`DragDrop` globals that v14 RC builds will deprecation-warn (and v15 will remove).
+* **`game.user_id` typo / `game.user._id`** in `ChatMessage.create` payloads — three sites (`AbstractOwnedMagicItemEntry` x2, `OwnedMagicItem` x1). `_id` worked by accident; `user_id` (underscore) was always `undefined`, with Foundry substituting the active user — message attribution looked correct but couldn't be filtered/queried by id.
+* **`RetrieveHelpers.retrieveUuid`** referenced an undefined local `pack` (`if (documentCollectionType || pack === "world")`) instead of the parameter `documentPack`. The world-collection branch never fired; every lookup fell through to the compendium-index branch.
+* **`RetrieveHelpers.getUuid`** called a bare `getDocument(target)` which isn't in scope — would `ReferenceError` if ever reached with a non-UUID input. Replaced with `RetrieveHelpers.getDocument(target)`.
+* **`OwnedMagicItem.consume`** read `this.item.system.uses.autoDestroy` without checking `system.uses` existed. `hasSystemUses()` returning false only guarantees `system.uses.max` is empty, not that the `uses` object is present (it's absent on most feats) — would `TypeError` on consume. Optional-chained to `uses?.autoDestroy`.
+* **`MagicItemHelpers.createSummoningOptions`** called `.reduce` on `summons.creatureSizes` / `creatureTypes`, which are `Set` instances in dnd5e 5.x (the `.size` check on the next line is the giveaway). Set has no `.reduce`, so multi-size / multi-type summoning spells threw. Wrapped in `Array.from(...)` before `.reduce`.
+* Deleted dead `AbstractOwnedMagicItemEntry.computeSaveDC` — never called, and the body mutated the actor's prepared `system.attributes.spelldc` in place without an `update()` call. The live DC-lookup path lives in `MagicItemSpell.prepareDisplay` and is correct.
+
+#### Foundry v13/v14/v15 forward-compat
+* Replaced every remaining `new Dialog(...)` with `foundry.applications.api.DialogV2.wait(...)` — five sites: `showNoChargesMessage` and `activeEffectMessage` in `AbstractOwnedMagicItemEntry`, plus three macro-API entry points in `api.js` (`magicItemAttack`, `magicItemMultipleSpellsTrinket`, `magicItemMultipleSpellsWeapon`). v1 `Dialog` is deprecated since v12 and removed at v15.
+* Replaced the v1 `DragDrop` global in `MagicItemTab` with `foundry.applications.ux.DragDrop.implementation`, with a legacy-global fallback for older Foundry. Same v15 removal target.
+
+### 4.2.17
+#### Bugfixes
+* Argon HUD hover-tooltips now show full info for **all** magic-item spells, not just ones that happen to have been cast (and therefore document-cached) earlier in the session. `fromUuidSync` returns only the compendium *index* entry for uncached items (no `school`/`description`/`activities`, no `toObject`), which is what caused 4.2.16 to show full tooltips for one spell on a staff while leaving the others as the "Nth Level undefined" stub. The integration now async-pre-fetches every magic-item spell's source document the first time it injects buttons for an actor, then re-runs the injection to rebuild buttons with rich data once the cache is warm.
+
+### 4.2.16
+#### Bugfixes
+* Argon HUD hover-tooltips for magic-item spells now show full info (level, school, target, range, components, description, properties) instead of the previous "Nth Level undefined" stub. The synthetic spell document Argon's button is built from now copies the full `system` block from the source spell via `fromUuidSync(entry.uuid).toObject()`, falling back to a barebones doc only if the source can't be resolved.
+
+### 4.2.15
+#### Bugfixes
+* Argon stale-charge-dots: take 4 — capture only the actor *id* and magicitem id (both stable primitives) and resolve the live Item5e through `globalThis.game.actors.get(actorId).items.get(magicItemId)` on every invocation. Reading `flags.magicitems.charges/uses` straight off Foundry's singleton-by-id store is immune to MIA re-binds, stale captures, and the bundle-scope `MagicItemActor.get` quirk that made the previous attempts fall back to the build-time `ownedMI`.
+
+### 4.2.14
+#### Bugfixes
+* Argon stale-charge-dots: take 3. The 4.2.13 fix captured `ownedMI.magicItemActor` directly, but when `MagicItemActor.bind()` runs more than once for the same actor (e.g. on token creation after the initial `ready` pass), the singleton entry gets replaced with a fresh `MagicItemActor`; any closure holding the older one keeps reading its frozen `.items` array. Rewrote the closure to capture **only** the Foundry Actor reference and the magicitem document id, then read `flags.magicitems.charges/uses` straight from the live `Item5e` on every invocation. Immune to MIA re-binds and to module-scope import shenanigans.
+
+### 4.2.13
+#### Bugfixes
+* Actually fix the Argon stale-charge-dots issue. The 4.2.12 attempt used `MagicItemActor.get(actorId)` inside the closure — in the built bundle that lookup returned `undefined` (the module-scope `MagicItemActor` reference doesn't see the populated `MAGICITEMS.actors` singleton from this scope, so `.get()` misses), and the closure silently fell back to the captured `ownedMI`, freezing the dots at the build-time value. Switched to capturing the `MagicItemActor` *instance* directly (`ownedMI.magicItemActor`) and reading `.items` off it each call — that reference is stable across rebuilds and resolves the live `OwnedMagicItem` correctly. Verified live: setFlag → flag changes → Argon's X/▢ dots reflect the new value within the next render tick.
+
+### 4.2.12
+#### Bugfixes
+* Completion of the 4.2.11 refresh fix on the Argon HUD side. The accordion-header `uses()` getter was capturing the `OwnedMagicItem` instance by closure, so when `MagicItemActor.buildItems()` rebuilt the actor's items into fresh instances post-cast, the closure still pointed at the dead one — Argon's X/▢ dots stayed at the pre-cast number even after `ui.ARGON.refresh()`. Reworked the closure to resolve the current `OwnedMagicItem` by id from `MagicItemActor.get(actorId).items` on every call, so each render reads the live `uses`. No-op when magicitems isn't bound.
+
+### 4.2.11
+#### Bugfixes
+* The Magic Items section's "X / Y charges" display on the character sheet, the per-spell charge counter in the inventory row, and Argon Combat HUD's spell-accordion X/▢ charge dots now refresh as soon as charges change. Added a single `updateItem` hook that rebuilds the in-memory `MagicItemActor`, re-renders any open actor sheet apps for that actor, and calls `ui.ARGON.refresh()` when the change targets the active HUD actor. Previously the in-memory cache and Argon's accordion header both held the pre-cast number until the sheet was closed and reopened, leading to confusion when (correctly) the destroy check fired on a cast that drained the last charges.
+
+### 4.2.10
+#### Bugfixes
+* **Spell casts via `OwnedMagicItemSpell.roll` (and therefore Argon HUD synthetic spells) now apply damage / healing through midi-qol + chris-premades.** The previous implementation built a transient (non-actor-embedded) `Item5e` clone and called `spell.use()` on it; chris-premades' `postNoAction` hook does `actor.items.get(spellId)` on the cast, finds nothing, aborts the workflow, and midi never reaches `applyDamage` / `applyHealing` — dice rolled into chat but HP never updated. Refactored `roll()` to `createEmbeddedDocuments("Item", ...)` a real, actor-embedded spell tagged with `flags.magicitems.transient`, call `.use()` on that, deduct magicitems charges, then delete the embedded item on whichever post-cast hook fires first (`midi-qol.RollComplete` or `dnd5e.postUseActivity`), with a 30-second timeout safety net. Owner check guards against player-side casts that can't write to a GM actor. A `ready`-time orphan sweep removes any transients whose 30 s TTL expired across a disconnect or crash.
+* Added a `renderActorSheet5e*` hook that hides items carrying `flags.magicitems.transient` while they exist, so a briefly-embedded spell can't appear in the actor's spellbook for the cast window.
+
+### 4.2.9 (superseded by 4.2.10)
+#### Bugfixes
+* Added `tryUnblockMidiWorkflow` post-cast helper to set `itemCardUuid` / `itemUseComplete` on midi's stalled Workflow on the transient spell clone. Verified live that the premise breaks in a chris-premades-decorated world: premades aborts the workflow *before* `spell.use()` returns, so the helper never gets a chance to run. The real fix lives in 4.2.10 (materialise the spell as a real actor-embedded item).
+
 ### 4.2.8
 #### Features
 * **Argon Combat HUD integration.** When `enhancedcombathud-dnd5e` is active, magic-item spells now appear in the Cast Spell accordion grouped under the parent magic item's name (same shape Argon's own dnd5e 5.x "Cast Activity" path uses). Charges show in the section header; clicks route through `MagicItemActor.rollByName(...)` so charge consumption, upcast dialog, summons, and active-effect prompts all work. The integration uses libWrapper on `DND5eButtonPanelButton.prePrepareSpells` and `DND5eItemButton._onLeftClick`, captured lazily via Argon's `render<class>ArgonComponent` hooks — no edits to Argon's source files, no actor data writes, and a direct-patch fallback if libWrapper isn't installed.

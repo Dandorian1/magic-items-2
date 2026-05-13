@@ -9,14 +9,26 @@ import "./scripts/integrations/argon.js";
 
 // CONFIG.debug.hooks = true;
 
+/**
+ *
+ * @param actor
+ * @param permission
+ */
 function canUseActor(actor, permission = "LIMITED") {
   return actor?.testUserPermission?.(game.user, permission) ?? actor?.isOwner ?? false;
 }
 
+/**
+ *
+ * @param html
+ */
 function normalizeHtml(html) {
   return html?.jquery ? html : $(html);
 }
 
+/**
+ *
+ */
 async function showWelcomeDialog() {
   const message =
     "Hello everyone!<br><br>This is the first version of Magic Items module that has been transferred from Magic Items 2, therefore it requires a migration of items.<br><br>For manual information about migrations, please consult the latest release changelog.<br><br>Thank you for your continuing support, and I hope you will enjoy this module!<br><br>If you want, please go ahead and check out the discord community created for this module on Foundry Module listing or Github project.";
@@ -54,6 +66,12 @@ async function showWelcomeDialog() {
   });
 }
 
+/**
+ *
+ * @param app
+ * @param html
+ * @param data
+ */
 function bindActorSheet(app, html, data) {
   const actor = app.actor ?? app.document ?? data?.actor;
   if (!actor || tidyApi?.isTidy5eCharacterSheet?.(app) || tidyApi?.isTidy5eNpcSheet?.(app)) {
@@ -62,6 +80,12 @@ function bindActorSheet(app, html, data) {
   MagicItemSheet.bind(app, normalizeHtml(html), data);
 }
 
+/**
+ *
+ * @param app
+ * @param html
+ * @param data
+ */
 function bindItemSheet(app, html, data) {
   if (tidyApi?.isTidy5eItemSheet?.(app) || !MagicItemTab.isAllowedToShow()) {
     return;
@@ -69,15 +93,23 @@ function bindItemSheet(app, html, data) {
   MagicItemTab.bind(app, normalizeHtml(html), data);
 }
 
-Handlebars.registerHelper("enabled", function (value, options) {
-  return Boolean(value) ? "" : "disabled";
+// Foundry v14 introduces `foundry.applications.handlebars.registerHelper`
+// as the preferred path; the global `Handlebars` works under v13 but is
+// expected to be removed eventually. Pick whichever is available so the
+// helpers register in both worlds.
+const _hbRegister =
+  foundry.applications?.handlebars?.registerHelper?.bind(foundry.applications.handlebars) ??
+  Handlebars.registerHelper.bind(Handlebars);
+
+_hbRegister("enabled", function (value, options) {
+  return value ? "" : "disabled";
 });
 
-Handlebars.registerHelper("formatString", function (toFormat, variables = {}) {
+_hbRegister("formatString", function (toFormat, variables = {}) {
   return game.i18n.format(toFormat, variables);
 });
 
-Handlebars.registerHelper("object", function ({ hash }) {
+_hbRegister("object", function ({ hash }) {
   return hash;
 });
 
@@ -237,7 +269,83 @@ Hooks.on("dnd5e.dropItemSheetData", (item, sheet, data) => {
   return false;
 });
 
+/**
+ * Keep downstream UIs in sync when a magic-item's flag block changes
+ * (typically because a spell cast just decremented `uses`).
+ *
+ *   - Rebuild the `MagicItemActor` so the in-memory `OwnedMagicItem.uses`
+ *     reflects the new flag value. The default `suspendListening` wrap
+ *     in `OwnedMagicItem.update()` blocks the rebuild that would
+ *     otherwise happen via an internal change listener, so we drive it
+ *     explicitly here from outside that wrap.
+ *   - Re-render any open actor sheet apps so the inline "X / Y charges"
+ *     display in the magic-items section of the spell tab refreshes.
+ *   - Refresh the Argon HUD for the active actor so its accordion-
+ *     header X/▢ charge dots read the new number; Argon only
+ *     auto-refreshes its portrait panel on `updateItem`, not the spell
+ *     accordion.
+ */
+Hooks.on("updateItem", async (item, change) => {
+  if (!foundry.utils.hasProperty(change, `flags.${CONSTANTS.MODULE_ID}`)) return;
+  const actor = item.parent;
+  if (!actor || actor.documentName !== "Actor") return;
+
+  const magicItemActor = MagicItemActor.get(actor.id);
+  if (magicItemActor) {
+    try {
+      await magicItemActor.buildItems();
+    } catch (e) {
+      /* Non-fatal — UI may just be stale until next render */
+    }
+  }
+
+  for (const app of Object.values(actor.apps ?? {})) {
+    try {
+      app.render?.(false);
+    } catch (e) {
+      /* Ignore — closing sheets can throw */
+    }
+  }
+
+  try {
+    if (typeof ui !== "undefined" && ui.ARGON?._actor?.id === actor.id && typeof ui.ARGON.refresh === "function") {
+      ui.ARGON.refresh();
+    }
+  } catch (e) {
+    /* Ignore — Argon may not be installed or rendered */
+  }
+});
+
 let tidyApi;
+
+/**
+ * Read a Tidy5e API constant by dotted path with a one-shot console.warn
+ * if the constant is undefined. Tidy5e renaming a SHEET_PARTS entry in a
+ * minor release would otherwise produce `[data-tidy-sheet-part="undefined"]`
+ * selectors that silently inject nothing — the warn surfaces the failure.
+ */
+const _warnedTidyKeys = new Set();
+/**
+ *
+ * @param api
+ * @param path
+ * @param fallback
+ */
+function tidyConst(api, path, fallback = "") {
+  const value = path.split(".").reduce((o, k) => o?.[k], api?.constants);
+  if (value === undefined || value === null) {
+    if (!_warnedTidyKeys.has(path)) {
+      _warnedTidyKeys.add(path);
+      console.warn(
+        `magicitems | Tidy5e API constant '${path}' is undefined — sheet injection for this selector will not work. ` +
+          "This usually means Tidy5e renamed the constant; please report at https://github.com/PwQt/magic-items-2/issues",
+      );
+    }
+    return fallback;
+  }
+  return value;
+}
+
 Hooks.once("tidy5e-sheet.ready", (api) => {
   tidyApi = api;
 
@@ -264,7 +372,7 @@ Hooks.once("tidy5e-sheet.ready", (api) => {
           item: params.data.item,
           magicItem: magicItem,
         });
-        MagicItemTab.activateDropTarget(params.element.querySelector(`.magicitems-content`), {
+        MagicItemTab.activateDropTarget(params.element.querySelector(".magicitems-content"), {
           item: params.data.item,
           magicItem: magicItem,
         });
@@ -281,7 +389,7 @@ Hooks.once("tidy5e-sheet.ready", (api) => {
       path: `modules/${CONSTANTS.MODULE_ID}/templates/magic-item-spell-sheet.html`,
       injectParams: {
         position: "afterbegin",
-        selector: `[data-tab-contents-for="${api.constants.TAB_ID_CHARACTER_SPELLBOOK}"] .scroll-container`,
+        selector: `[data-tab-contents-for="${tidyConst(api, "TAB_ID_CHARACTER_SPELLBOOK")}"] .scroll-container`,
       },
       enabled(data) {
         const magicItemActor = MagicItemActor.get(data.actor.id);
@@ -299,8 +407,8 @@ Hooks.once("tidy5e-sheet.ready", (api) => {
   );
 
   // Register character and NPC feature tab custom content
-  const npcAbilitiesTabContainerSelector = `[data-tidy-sheet-part="${api.constants.SHEET_PARTS.NPC_ABILITIES_CONTAINER}"]`;
-  const characterFeaturesContainerSelector = `[data-tab-contents-for="${api.constants.TAB_ID_CHARACTER_FEATURES}"] [data-tidy-sheet-part="${api.constants.SHEET_PARTS.ITEMS_CONTAINER}"]`;
+  const npcAbilitiesTabContainerSelector = `[data-tidy-sheet-part="${tidyConst(api, "SHEET_PARTS.NPC_ABILITIES_CONTAINER")}"]`;
+  const characterFeaturesContainerSelector = `[data-tab-contents-for="${tidyConst(api, "TAB_ID_CHARACTER_FEATURES")}"] [data-tidy-sheet-part="${tidyConst(api, "SHEET_PARTS.ITEMS_CONTAINER")}"]`;
   const magicItemFeatureTargetSelector = [npcAbilitiesTabContainerSelector, characterFeaturesContainerSelector].join(
     ", ",
   );
@@ -336,38 +444,40 @@ Hooks.on("tidy5e-sheet.renderActorSheet", (app, element, data) => {
     return;
   }
 
-  magicItemActor.items
-    .filter((item) => item.visible)
-    .forEach((item) => {
-      let itemEl = html.find(
-        `[data-tidy-sheet-part="${tidyApi.constants.SHEET_PARTS.ITEM_TABLE_ROW}"][data-item-id="${item.id}"]`,
-      );
-      let itemNameContainer = itemEl.find(`[data-tidy-sheet-part=${tidyApi.constants.SHEET_PARTS.ITEM_NAME}]`);
-      let iconHtml = tidyApi.useHandlebarsRendering(CONSTANTS.HTML.MAGIC_ITEM_ICON);
-      itemNameContainer.append(iconHtml);
-    });
+  const ITEM_TABLE_ROW = tidyConst(tidyApi, "SHEET_PARTS.ITEM_TABLE_ROW");
+  const ITEM_NAME = tidyConst(tidyApi, "SHEET_PARTS.ITEM_NAME");
+  if (ITEM_TABLE_ROW && ITEM_NAME && typeof tidyApi?.useHandlebarsRendering === "function") {
+    magicItemActor.items
+      .filter((item) => item.visible)
+      .forEach((item) => {
+        let itemEl = html.find(`[data-tidy-sheet-part="${ITEM_TABLE_ROW}"][data-item-id="${item.id}"]`);
+        let itemNameContainer = itemEl.find(`[data-tidy-sheet-part=${ITEM_NAME}]`);
+        let iconHtml = tidyApi.useHandlebarsRendering(CONSTANTS.HTML.MAGIC_ITEM_ICON);
+        itemNameContainer.append(iconHtml);
+      });
+  }
 
   // Wire events for custom tidy actor sheet content
   MagicItemSheet.handleEvents(html, magicItemActor);
 });
 
-Hooks.on(`renderItemSheet5e`, (app, html, data) => {
+Hooks.on("renderItemSheet5e", (app, html, data) => {
   bindItemSheet(app, html, data);
 });
 
-Hooks.on(`renderActorSheet5eCharacter`, (app, html, data) => {
+Hooks.on("renderActorSheet5eCharacter", (app, html, data) => {
   bindActorSheet(app, html, data);
 });
 
-Hooks.on(`renderActorSheet5eNPC`, (app, html, data) => {
+Hooks.on("renderActorSheet5eNPC", (app, html, data) => {
   bindActorSheet(app, html, data);
 });
 
-Hooks.on(`renderCharacterActorSheet`, (app, html, data) => {
+Hooks.on("renderCharacterActorSheet", (app, html, data) => {
   bindActorSheet(app, html, data);
 });
 
-Hooks.on(`renderNPCActorSheet`, (app, html, data) => {
+Hooks.on("renderNPCActorSheet", (app, html, data) => {
   bindActorSheet(app, html, data);
 });
 
@@ -375,7 +485,11 @@ Hooks.on("hotbarDrop", async (bar, data, slot) => {
   if (data.type !== "MagicItem") {
     return;
   }
-  const command = `MagicItems.roll("${data.magicItemName}","${data.itemName}");`;
+  // JSON.stringify produces a properly-escaped JS string literal, so
+  // item names containing apostrophes, quotes, or backslashes (e.g.
+  // "Smith's Wand", `\\u2019`-flavoured curly quotes) don't blow up
+  // the generated macro.
+  const command = `MagicItems.roll(${JSON.stringify(data.magicItemName)}, ${JSON.stringify(data.itemName)});`;
   let macro = game.macros.find((m) => m.name === data.name && m.command === command);
   if (!macro) {
     macro = await Macro.create(
@@ -430,26 +544,5 @@ Hooks.on("deleteItem", async (item, options, userId) => {
     if (miActor && miActor.listening && miActor.actor.id === actor.id) {
       await miActor.buildItems();
     }
-  }
-});
-
-Hooks.on("preCreateItem", async (item, data, options, userId) => {
-  const actorEntity = item.actor;
-  if (!actorEntity) {
-    return;
-  }
-});
-
-Hooks.on("preUpdateItem", async (item, changes, options, userId) => {
-  const actorEntity = item.actor;
-  if (!actorEntity) {
-    return;
-  }
-});
-
-Hooks.on("preDeleteItem", async (item, options, userId) => {
-  const actorEntity = item.actor;
-  if (!actorEntity) {
-    return;
   }
 });

@@ -80,7 +80,7 @@ export class AbstractMagicItemEntry {
   }
 
   entityCls() {
-    return CONFIG["Item"];
+    return CONFIG.Item;
   }
 
   data() {

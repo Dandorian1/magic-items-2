@@ -29,7 +29,7 @@ export class MagicItemActor {
   }
 
   /**
-   * ctor. Builds a new instance of a MagicItemActor
+   * Ctor. Builds a new instance of a MagicItemActor
    *
    * @param actor
    */
@@ -159,7 +159,7 @@ export class MagicItemActor {
   }
 
   /**
-   * returns the number of visible actives magic items owned by the actor.
+   * Returns the number of visible actives magic items owned by the actor.
    */
   get magicItemsActiveCount() {
     return this.visibleItems.reduce((actives, item) => actives + item.active, 0);

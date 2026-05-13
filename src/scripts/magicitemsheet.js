@@ -4,10 +4,9 @@ import { MagicItemHelpers } from "./magic-item-helpers.js";
 import { RetrieveHelpers } from "./lib/retrieve-helpers.js";
 import { MagicItemActor } from "./magicitemactor.js";
 import Logger from "./lib/Logger.js";
+import { renderTemplate as renderTemplateV2 } from "./lib/foundry-compat.js";
 
 const magicItemSheets = [];
-
-const renderTemplateV2 = foundry.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
 
 export class MagicItemSheet {
   /**
@@ -123,6 +122,7 @@ export class MagicItemSheet {
    * @param filename
    * @param cls
    * @param tab
+   * @param listName
    * @returns {Promise<void>}
    */
   async renderTemplate(filename, cls, tab, listName) {
@@ -171,6 +171,8 @@ export class MagicItemSheet {
 
   /**
    *
+   * @param html
+   * @param actor
    */
   static handleEvents(html, actor) {
     if (!actor.isUsingNew5eSheet) {
@@ -184,7 +186,7 @@ export class MagicItemSheet {
   }
 
   static handleMagicItemDragStart(html, actor) {
-    html.find(`li.item.magic-item`).each((i, li) => {
+    html.find("li.item.magic-item").each((i, li) => {
       li.addEventListener("dragstart", (evt) => MagicItemSheet.onDragItemStart(evt, actor));
     });
   }
@@ -207,6 +209,7 @@ export class MagicItemSheet {
   /**
    *
    * @param evt
+   * @param actor
    */
   static async onItemRoll(evt, actor) {
     evt.preventDefault();
@@ -214,7 +217,7 @@ export class MagicItemSheet {
     let magicItemId = dataset.magicItemId;
     let itemId = dataset.itemId;
     await actor.roll(magicItemId, itemId);
-    // this.render();
+    // This.render();
   }
 
   /**
@@ -240,17 +243,24 @@ export class MagicItemSheet {
       });
     }
     const itemTmp = await fromUuid(uuid);
-    if (itemTmp) {
-      itemTmp.ownership.default = CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED;
-      itemTmp.sheet.render(true);
-    } else {
+    if (!itemTmp) {
       Logger.error(`An item with UUID ${uuid} could not be found. Please verify.`);
+      return;
     }
+    // Open the linked item's sheet without mutating its ownership.
+    // The old code patched `ownership.default = LIMITED` in place to
+    // bypass dnd5e's owner-gated sheet render, but in-place ownership
+    // edits aren't persisted and v13's stricter data-prep cycle may
+    // ignore them entirely. Pass `editable: false` so non-owners get a
+    // read-only render; Foundry tolerates that for any document the
+    // current user can at least observe.
+    itemTmp.sheet.render({ force: true, editable: itemTmp.isOwner });
   }
 
   /**
    *
    * @param evt
+   * @param actor
    */
   static onDragItemStart(evt, actor) {
     const li = evt.currentTarget;
