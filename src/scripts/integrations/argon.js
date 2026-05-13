@@ -80,6 +80,7 @@ function applyWraps() {
       };
     }
     _wrappedPrepare = true;
+    rerunPrepareOnExistingButtons();
   }
 
   if (_ItemButtonCtor && !_wrappedClick) {
@@ -111,6 +112,37 @@ function applyWraps() {
 }
 
 let _origClickFallback;
+
+/**
+ * Argon may have already constructed its spell-type `DND5eButtonPanelButton`
+ * instances by the time our wrap installs (the `renderXxxArgonComponent`
+ * hook necessarily fires *after* the ctor that produced the rendered
+ * element). For those instances, re-run `prePrepareSpells` so our wrapper
+ * gets a chance to inject the magic-item groups; then trigger a HUD
+ * refresh so the accordion picks up the updated `_spells`.
+ */
+function rerunPrepareOnExistingButtons() {
+  const ARGON = ui?.ARGON;
+  if (!ARGON?.components?.main?.length) return;
+  let touched = false;
+  for (const panel of ARGON.components.main) {
+    for (const button of panel?._buttons ?? []) {
+      if (!(button instanceof _ButtonPanelButtonCtor)) continue;
+      if (button.type !== "spell") continue;
+      button.itemsWithSpells = [];
+      const result = button.prePrepareSpells();
+      if (Array.isArray(result)) {
+        button._spells = result;
+        touched = true;
+      }
+    }
+  }
+  if (touched && typeof ARGON.refresh === "function") {
+    Promise.resolve()
+      .then(() => ARGON.refresh())
+      .catch(() => {});
+  }
+}
 
 /**
  * Read our synthetic-spell flag off whichever shape the button instance
