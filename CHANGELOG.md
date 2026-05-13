@@ -1,3 +1,15 @@
+### 4.4.0
+#### Tech-debt phase 3 — architecture cleanup
+No new functionality. Four targeted refactors that pay down the highest-leverage architecture debt while keeping the runtime contract identical for every user-visible path.
+
+* **A1 — `MAGICITEMS.actors` singleton → WeakMap.** Replaced the JS-object-as-map-on-an-array storage (`MAGICITEMS.actors = []`, indexed by `actor.id`) with a `WeakMap<Actor, MagicItemActor>` keyed by the live Actor document, plus a side `Map<actorId, MagicItemActor>` index for unlinked / synthetic token actors whose IDs aren't in `game.actors`. `MagicItemActor.get(actorId)` interface is preserved (16+ call sites unchanged); added `MagicItemActor.getForActor(actor)` as the fast path for callers that already hold the document reference. Eliminates the storage-hygiene root cause of the 4.2.12–4.2.15 stale-charge-dot regressions.
+* **C6 — DRY destroyed() d20 roll.** Extracted `MagicItemHelpers.rollDestroyCheck({name, actor, destroyCheck, destroyDC})` to share the d20 / destroyCheck / chat-message logic between `OwnedMagicItem.destroyed()` and `AbstractOwnedMagicItemEntry.destroyed()`. Both call sites are now 12 lines instead of 35.
+* **C7 — Activity-aware effect application.** `OwnedMagicItemSpell.roll()` now skips the manual `applyActiveEffects()` path when the spell has activity-level effects (`system.activities[*].effects`) — those are applied by dnd5e's own workflow during `.use()`, so the prior unconditional manual apply was double-stacking effects on dnd5e 5.x spells without midi-qol. Legacy spells with bare `item.effects` and no activity effects still take the manual path.
+* **C4 — Removed `MagicItemTab.hack()` prototype-walk.** Replaced the 17-line `setPosition` monkey-patch that walked the prototype chain looking for the dnd5e `ItemSheet` ancestor with an in-place `setPosition({height: "auto"})` call from `adjustSheetSize()` when the magic-item tab is active. v2 sheets already auto-size via ApplicationV2 lifecycle and are explicitly skipped. The constructor lost its conditional hack-install branch; the unused `ItemSheetClass` import was dropped from `magicItemtab.js`.
+
+#### Deferred
+* D4 (jQuery → native DOM in `OwnedMagicItemSpell.js` + `argon.js`) deferred to Phase 5. Re-audit showed both files are already jQuery-free in their hot paths; only sheet/UI files have remaining jQuery touches.
+
 ### 4.3.2
 #### Tech-debt phase 2 — CI quality gates
 

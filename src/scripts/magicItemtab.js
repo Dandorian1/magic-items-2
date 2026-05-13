@@ -2,12 +2,7 @@ import CONSTANTS from "./constants/constants.js";
 import { MagicItem } from "./magic-item/MagicItem.js";
 import { MagicItemHelpers } from "./magic-item-helpers.js";
 import Logger from "./lib/Logger.js";
-import {
-  ItemSheetClass,
-  renderTemplate as renderTemplateV2,
-  DragDropClass,
-  TextEditorImpl,
-} from "./lib/foundry-compat.js";
+import { renderTemplate as renderTemplateV2, DragDropClass, TextEditorImpl } from "./lib/foundry-compat.js";
 
 const magicItemTabs = [];
 
@@ -25,9 +20,6 @@ export class MagicItemTab {
   }
 
   constructor(app) {
-    if (app.setPosition && typeof ItemSheetClass !== "undefined" && !MagicItemTab.isApplicationV2(app)) {
-      this.hack(app);
-    }
     this.activate = false;
   }
 
@@ -107,25 +99,6 @@ export class MagicItemTab {
     return Boolean(applicationV2 && app instanceof applicationV2);
   }
 
-  // C4 in tech-debt plan — replace this prototype-walk monkey-patch in 4.4.0.
-  hack(app) {
-    const originalSetPosition = app.setPosition.bind(app);
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const tab = this;
-    app.setPosition = function (position = {}) {
-      position.height = tab.isActive() && !position.height ? "auto" : position.height;
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
-      let that = this;
-      for (let i = 0; i < 100 && that; i++) {
-        if (that.constructor?.name === ItemSheetClass.name && typeof that.setPosition === "function") {
-          return that.setPosition.apply(this, [position]);
-        }
-        that = Object.getPrototypeOf(that);
-      }
-      return originalSetPosition(position);
-    };
-  }
-
   async render(app) {
     let template = await renderTemplateV2(
       `modules/${CONSTANTS.MODULE_ID}/templates/magic-item-tab.hbs`,
@@ -188,8 +161,18 @@ export class MagicItemTab {
     const maxWidth = Math.max(700, viewportWidth - 32);
     const width = Math.min(Math.max(currentWidth, targetWidth), maxWidth);
 
+    // When the Magic Item tab is active, force `height: "auto"` so the
+    // sheet expands to fit the rows (replaces the prior `hack()` monkey-patch).
+    // Only meaningful on v1 sheets; v2 sheets auto-size via their own
+    // ApplicationV2 lifecycle.
+    const isActive = this.isActive();
+    const isV2 = MagicItemTab.isApplicationV2(app);
+    const heightOverride = isActive && !isV2 ? "auto" : undefined;
+
     if (width > currentWidth + 8) {
-      app.setPosition({ width });
+      app.setPosition(heightOverride ? { width, height: heightOverride } : { width });
+    } else if (heightOverride) {
+      app.setPosition({ height: heightOverride });
     } else {
       app.setPosition();
     }

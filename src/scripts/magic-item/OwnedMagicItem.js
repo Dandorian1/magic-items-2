@@ -136,34 +136,13 @@ export class OwnedMagicItem extends MagicItem {
   }
 
   async destroyed() {
-    let destroyed = this.uses === 0 && this.destroy;
-    if (destroyed && this.destroyCheck === "d2") {
-      let r = new Roll("1d20");
-      await r.evaluate();
-      destroyed = r.total === 1;
-      await r.toMessage({
-        flavor: `<b>${this.name}</b> ${game.i18n.localize("MAGICITEMS.MagicItemDestroyCheck")}
-                        - ${
-                          destroyed
-                            ? game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckFailure")
-                            : game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckSuccess")
-                        }`,
-        speaker: ChatMessage.getSpeaker({ actor: this.actor, token: this.actor.token }),
-      });
-    } else if (destroyed && this.destroyCheck === "d3") {
-      let r = new Roll("1d20");
-      await r.evaluate();
-      destroyed = r.total <= this.destroyDC;
-      await r.toMessage({
-        flavor: `<b>${this.name}</b> ${game.i18n.localize("MAGICITEMS.MagicItemDestroyCheck")}
-                        - ${
-                          destroyed
-                            ? game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckFailure")
-                            : game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckSuccess")
-                        }`,
-        speaker: ChatMessage.getSpeaker({ actor: this.actor, token: this.actor.token }),
-      });
-    }
+    if (this.uses !== 0 || !this.destroy) return false;
+    const destroyed = await MagicItemHelpers.rollDestroyCheck({
+      name: this.name,
+      actor: this.actor,
+      destroyCheck: this.destroyCheck,
+      destroyDC: this.destroyDC,
+    });
     if (destroyed) {
       ChatMessage.create({
         user: game.user.id,

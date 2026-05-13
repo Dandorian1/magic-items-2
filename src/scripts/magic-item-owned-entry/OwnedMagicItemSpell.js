@@ -357,7 +357,14 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
         }
       }
 
-      if (spell.effects?.size > 0 && !MagicItemHelpers.isMidiItemEffectWorkflowOn()) {
+      // Skip manual apply if the spell has activity-level effects — dnd5e's
+      // workflow already applies those during .use(), so a second pass would
+      // double-apply. Only legacy spells with bare `item.effects` and no
+      // activity effects need the manual path.
+      const hasActivityEffects = Array.from(iterActivities(spell.system)).some(
+        (a) => Array.isArray(a?.effects) && a.effects.length > 0,
+      );
+      if (spell.effects?.size > 0 && !hasActivityEffects && !MagicItemHelpers.isMidiItemEffectWorkflowOn()) {
         this.activeEffectMessage(async () => {
           await this.applyActiveEffects(spell);
         });
