@@ -15,10 +15,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      # package-lock.json is gitignored in this repo, so use `npm install`
-      # rather than `npm ci` (which requires a lockfile).
+      # package-lock.json is gitignored; npm install (not ci) and no cache
+      # (setup-node's npm cache also needs a lockfile to compute the key).
       - run: npm install
 
       - name: Lint (zero warnings)
