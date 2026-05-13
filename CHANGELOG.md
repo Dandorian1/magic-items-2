@@ -1,3 +1,7 @@
+### 4.2.15
+#### Bugfixes
+* Argon stale-charge-dots: take 4 — capture only the actor *id* and magicitem id (both stable primitives) and resolve the live Item5e through `globalThis.game.actors.get(actorId).items.get(magicItemId)` on every invocation. Reading `flags.magicitems.charges/uses` straight off Foundry's singleton-by-id store is immune to MIA re-binds, stale captures, and the bundle-scope `MagicItemActor.get` quirk that made the previous attempts fall back to the build-time `ownedMI`.
+
 ### 4.2.14
 #### Bugfixes
 * Argon stale-charge-dots: take 3. The 4.2.13 fix captured `ownedMI.magicItemActor` directly, but when `MagicItemActor.bind()` runs more than once for the same actor (e.g. on token creation after the initial `ready` pass), the singleton entry gets replaced with a fresh `MagicItemActor`; any closure holding the older one keeps reading its frozen `.items` array. Rewrote the closure to capture **only** the Foundry Actor reference and the magicitem document id, then read `flags.magicitems.charges/uses` straight from the live `Item5e` on every invocation. Immune to MIA re-binds and to module-scope import shenanigans.

@@ -193,22 +193,28 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   // header to render blank. Default-pack magicitems data ships `charges`
   // as a string (e.g. "10"), so coerce explicitly.
   //
-  // The closure captures the actor + magicitem document id only, then
-  // reads `flags.magicitems.charges/uses` directly off the live Item5e
-  // on every invocation. This intentionally bypasses both the
-  // `MagicItemActor` singleton and any cached `OwnedMagicItem`
-  // instance: prior attempts (4.2.12 / 4.2.13) that captured the
-  // `MagicItemActor` or its `OwnedMagicItem` returned stale values
-  // because (a) the closure's `MagicItemActor` module reference does
-  // not always see the populated `MAGICITEMS.actors` singleton, and
-  // (b) `bind`ing an actor more than once replaces the singleton entry
-  // while leaving any captured MIA instance pointing at a frozen
-  // `.items` array. Reading the flag straight from the actor's Item5e
-  // is immune to both.
+  // The closure captures only the actor id + magicitem document id —
+  // both stable string primitives — then resolves the live Item5e on
+  // every invocation through Foundry's own singleton-by-id stores
+  // (`game.actors.get(actorId).items.get(magicItemId)`). Reading
+  // `flags.magicitems.charges/uses` straight off that document is
+  // immune to any of the failure modes 4.2.12 / 4.2.13 / 4.2.14 hit:
+  //
+  //   - `MagicItemActor.get(actorId)` returning undefined from the
+  //     integration's bundle scope.
+  //   - Stale `MagicItemActor` instance captures left over from a
+  //     re-bind (`MagicItemActor.bind` runs on `ready` and again on
+  //     token creation, each call replaces the singleton).
+  //   - Stale Actor references captured before the document was
+  //     rehydrated.
+  //
+  // Fallback to `ownedMI.charges/uses` only if Foundry can't resolve
+  // the actor or item — covers the deleted-during-cast edge case.
   const usesFromMagicItem = (ownedMI) => {
-    const actor = ownedMI.actor ?? ownedMI.magicItemActor?.actor;
+    const actorId = ownedMI.actor?.id ?? ownedMI.magicItemActor?.actor?.id;
     const magicItemId = ownedMI.id ?? ownedMI.item?.id;
     return () => {
+      const actor = globalThis.game?.actors?.get?.(actorId);
       const item = actor?.items?.get?.(magicItemId);
       const flags = item?.flags?.[CONSTANTS.MODULE_ID] ?? {};
       const max = Number(flags.charges ?? ownedMI.charges);
