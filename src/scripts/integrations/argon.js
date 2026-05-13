@@ -304,27 +304,55 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
  * spell entry. The spell document is constructed un-embedded
  * (`{parent: actor}`) so it carries the actor's data prep context for
  * label rendering but never touches the actor's items Collection.
+ *
+ * Prefer copying the source spell's full `system` block via
+ * `fromUuidSync(entry.uuid).toObject()` so Argon's hover tooltip has
+ * school, range, target, components, description, and activities to
+ * render. Foundry's `fromUuidSync` returns fully-populated documents
+ * for both actor-embedded and compendium items (compendium contents
+ * are indexed at world load), so the lookup is cheap and reliable.
+ * Falls back to a barebones doc if the uuid can't be resolved
+ * (deleted source, broken reference) so the button still renders.
  */
 function buildButton(actor, ownedMI, ownedSpell) {
   const entry = ownedSpell?.item ?? ownedSpell;
   if (!entry) return null;
   let spellDoc = null;
   try {
-    const spellData = {
-      _id: entry.id,
-      name: entry.name,
-      type: "spell",
-      img: entry.img,
-      system: {
-        level: Number(entry.level ?? entry.baseLevel ?? 0),
-      },
-      flags: {
-        [CONSTANTS.MODULE_ID]: {
-          [SYNTHETIC_FLAG]: { magicItemName: ownedMI.name, spellName: entry.name },
+    let source = null;
+    if (entry.uuid) {
+      try {
+        source = fromUuidSync(entry.uuid);
+      } catch (e) {
+        source = null;
+      }
+    }
+    let spellData;
+    if (source?.toObject) {
+      spellData = source.toObject();
+      spellData._id = entry.id;
+      spellData.name = entry.name ?? spellData.name;
+      spellData.img = entry.img ?? spellData.img;
+      spellData.system = spellData.system ?? {};
+      spellData.system.level = Number(entry.level ?? entry.baseLevel ?? spellData.system.level ?? 0);
+    } else {
+      spellData = {
+        _id: entry.id,
+        name: entry.name,
+        type: "spell",
+        img: entry.img,
+        system: {
+          level: Number(entry.level ?? entry.baseLevel ?? 0),
         },
-      },
+      };
+    }
+    spellData.flags = spellData.flags ?? {};
+    spellData.flags[CONSTANTS.MODULE_ID] = {
+      ...(spellData.flags[CONSTANTS.MODULE_ID] ?? {}),
+      [SYNTHETIC_FLAG]: { magicItemName: ownedMI.name, spellName: entry.name },
     };
     spellDoc = new CONFIG.Item.documentClass(spellData, { parent: actor });
+    spellDoc.prepareFinalAttributes?.();
   } catch (e) {
     Logger.warn(`Argon: failed to build transient spell for ${entry?.name}: ${e?.message}`, false, e);
     return null;

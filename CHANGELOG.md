@@ -1,3 +1,7 @@
+### 4.2.16
+#### Bugfixes
+* Argon HUD hover-tooltips for magic-item spells now show full info (level, school, target, range, components, description, properties) instead of the previous "Nth Level undefined" stub. The synthetic spell document Argon's button is built from now copies the full `system` block from the source spell via `fromUuidSync(entry.uuid).toObject()`, falling back to a barebones doc only if the source can't be resolved.
+
 ### 4.2.15
 #### Bugfixes
 * Argon stale-charge-dots: take 4 — capture only the actor *id* and magicitem id (both stable primitives) and resolve the live Item5e through `globalThis.game.actors.get(actorId).items.get(magicItemId)` on every invocation. Reading `flags.magicitems.charges/uses` straight off Foundry's singleton-by-id store is immune to MIA re-binds, stale captures, and the bundle-scope `MagicItemActor.get` quirk that made the previous attempts fall back to the build-time `ownedMI`.
