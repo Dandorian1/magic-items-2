@@ -184,6 +184,39 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   const mia = MagicItemActor.get(actor.id);
   if (!mia?.items?.length) return;
 
+  // Argon's accordion-category header renders the X/▢ charge dots from
+  // these numbers; non-numeric (string or NaN) max/value causes the
+  // header to render blank. Default-pack magicitems data ships `charges`
+  // as a string (e.g. "10"), so coerce explicitly.
+  const usesFromMagicItem = (ownedMI) => () => {
+    const max = Number(ownedMI.charges);
+    const value = Number(ownedMI.uses);
+    return {
+      max: Number.isFinite(max) ? max : 0,
+      value: Number.isFinite(value) ? value : 0,
+    };
+  };
+
+  // If Argon's own `cachedFor` path already added a group with the same
+  // label (the actor has dnd5e 5.x Cast Activities configured on the
+  // staff and the cached spells live as real actor items), the native
+  // group's `uses` getter reads from the parent item's
+  // `system.uses.max/value` — empty on a magicitems-managed weapon — so
+  // the X/▢ charge dots don't render. Swap in our magicitems-aware
+  // `uses` getter on the existing group rather than adding a duplicate.
+  const namesToMagicItem = new Map();
+  for (const ownedMI of mia.items) {
+    if (ownedMI.active && ownedMI.visible) namesToMagicItem.set(ownedMI.name, ownedMI);
+  }
+  const upgradeNativeGroup = (group) => {
+    const ownedMI = namesToMagicItem.get(group?.label);
+    if (!ownedMI) return false;
+    group.uses = usesFromMagicItem(ownedMI);
+    return true;
+  };
+  for (const g of buttonPanelButton.itemsWithSpells ?? []) upgradeNativeGroup(g);
+  if (Array.isArray(preparedSpells)) for (const g of preparedSpells) upgradeNativeGroup(g);
+
   const existingItemsWithSpellsLabels = new Set((buttonPanelButton.itemsWithSpells ?? []).map((g) => g.label));
   const existingPreparedLabels = new Set((Array.isArray(preparedSpells) ? preparedSpells : []).map((g) => g.label));
 
@@ -204,18 +237,7 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
     const group = {
       label: ownedMI.name,
       buttons,
-      // Argon's accordion-category header renders the X/▢ charge dots
-      // from these numbers; non-numeric (string or NaN) max/value causes
-      // the header to render blank. Magic-items default-pack data ships
-      // `charges` as a string (e.g. "10") so coerce explicitly.
-      uses: () => {
-        const max = Number(ownedMI.charges);
-        const value = Number(ownedMI.uses);
-        return {
-          max: Number.isFinite(max) ? max : 0,
-          value: Number.isFinite(value) ? value : 0,
-        };
-      },
+      uses: usesFromMagicItem(ownedMI),
     };
     newGroups.push(group);
     if (!existingItemsWithSpellsLabels.has(group.label)) buttonPanelButton.itemsWithSpells.push(group);
