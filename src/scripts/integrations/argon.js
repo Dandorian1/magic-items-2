@@ -85,6 +85,11 @@ function applyWraps() {
 
   if (_ItemButtonCtor && !_wrappedClick) {
     const proto = _ItemButtonCtor.prototype;
+    // Wrap `_onPreLeftClick`, not `_onLeftClick`. The former runs first and
+    // reads `this.targets` → `this.activity.actionType` (echDnd5e.js:845).
+    // Our synthetic spell has an empty `system.activities` collection, so
+    // `activity` resolves to undefined and the read throws before
+    // `_onLeftClick` ever fires.
     const interceptor = async function (wrappedOrEvent, maybeEvent) {
       const usingWrapper = typeof wrappedOrEvent === "function";
       const event = usingWrapper ? maybeEvent : wrappedOrEvent;
@@ -100,10 +105,10 @@ function applyWraps() {
       return _origClickFallback.call(this, event);
     };
     if (hasLibWrapper()) {
-      libWrapper.register(CONSTANTS.MODULE_ID, proto, "_onLeftClick", interceptor, "MIXED");
+      libWrapper.register(CONSTANTS.MODULE_ID, proto, "_onPreLeftClick", interceptor, "MIXED");
     } else {
-      _origClickFallback = proto._onLeftClick;
-      proto._onLeftClick = function (event) {
+      _origClickFallback = proto._onPreLeftClick;
+      proto._onPreLeftClick = function (event) {
         return interceptor.call(this, event);
       };
     }
