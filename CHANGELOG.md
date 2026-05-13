@@ -1,6 +1,11 @@
-### 4.2.9
+### 4.2.10
 #### Bugfixes
-* Casting a magic-item spell via `MagicItemActor.rollByName` now lets midi-qol's Workflow complete — previously the Workflow created for the cast suspended at `WorkflowState_AwaitItemCard` (because `itemCardUuid` and `itemUseComplete` are only set inside `MidiActivity.use()`, which never fires for our transient non-embedded spell clone), so dice rolled into chat but HP changes never applied. `OwnedMagicItemSpell.roll` now locates the suspended Workflow by activity UUID immediately after `spell.use()` returns, fills in `itemCardUuid` + `itemUseComplete`, and kicks `performState(WorkflowState_Start)`. Guarded so non-midi installs are an unchanged no-op.
+* **Spell casts via `OwnedMagicItemSpell.roll` (and therefore Argon HUD synthetic spells) now apply damage / healing through midi-qol + chris-premades.** The previous implementation built a transient (non-actor-embedded) `Item5e` clone and called `spell.use()` on it; chris-premades' `postNoAction` hook does `actor.items.get(spellId)` on the cast, finds nothing, aborts the workflow, and midi never reaches `applyDamage` / `applyHealing` — dice rolled into chat but HP never updated. Refactored `roll()` to `createEmbeddedDocuments("Item", ...)` a real, actor-embedded spell tagged with `flags.magicitems.transient`, call `.use()` on that, deduct magicitems charges, then delete the embedded item on whichever post-cast hook fires first (`midi-qol.RollComplete` or `dnd5e.postUseActivity`), with a 30-second timeout safety net. Owner check guards against player-side casts that can't write to a GM actor. A `ready`-time orphan sweep removes any transients whose 30 s TTL expired across a disconnect or crash.
+* Added a `renderActorSheet5e*` hook that hides items carrying `flags.magicitems.transient` while they exist, so a briefly-embedded spell can't appear in the actor's spellbook for the cast window.
+
+### 4.2.9 (superseded by 4.2.10)
+#### Bugfixes
+* Added `tryUnblockMidiWorkflow` post-cast helper to set `itemCardUuid` / `itemUseComplete` on midi's stalled Workflow on the transient spell clone. Verified live that the premise breaks in a chris-premades-decorated world: premades aborts the workflow *before* `spell.use()` returns, so the helper never gets a chance to run. The real fix lives in 4.2.10 (materialise the spell as a real actor-embedded item).
 
 ### 4.2.8
 #### Features
