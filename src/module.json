@@ -2,7 +2,7 @@
   "id": "magicitems",
   "title": "Magic Items",
   "description": "Module that adds the ability to create magical items with spells or feats that belong to the item itself, such as staffs or magic wands, which will be automatically inherited from the character who owns the item.",
-  "version": "4.2.5",
+  "version": "4.2.8",
   "compatibility": {
     "minimum": 13,
     "verified": 13.351
@@ -145,6 +145,18 @@
       }
     ],
     "requires": [],
+    "recommends": [
+      {
+        "id": "lib-wrapper",
+        "type": "module",
+        "reason": "Used to non-destructively layer the Argon Combat HUD integration on top of enhancedcombathud-dnd5e."
+      },
+      {
+        "id": "enhancedcombathud-dnd5e",
+        "type": "module",
+        "reason": "When present, magic-item spells are surfaced in the Argon Cast Spell accordion grouped under their parent item."
+      }
+    ],
     "conflicts": []
   }
 }

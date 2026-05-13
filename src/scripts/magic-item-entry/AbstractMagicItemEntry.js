@@ -42,29 +42,40 @@ export class AbstractMagicItemEntry {
 
   entity() {
     return new Promise((resolve, reject) => {
-      if (this.pack === "world") {
-        let entity = this.entityCls().collection?.instance?.get(this.id);
+      // Prefer UUID lookup — handles actor-embedded items (Actor.<id>.Item.<id>)
+      // that the pack === "world" branch misses by only reading the world-level
+      // Items collection.
+      const tryUuid = this.uuid ? fromUuid(this.uuid).catch(() => null) : Promise.resolve(null);
+      tryUuid.then((entity) => {
         if (entity) {
           resolve(entity);
-        } else {
-          Logger.warn(game.i18n.localize("MAGICITEMS.WarnNoMagicItemSpell") + this.name, true);
-          reject();
+          return;
         }
-      } else {
+        if (this.pack === "world" || !this.pack) {
+          const worldEntity = this.entityCls().collection?.instance?.get(this.id);
+          if (worldEntity) {
+            resolve(worldEntity);
+          } else {
+            Logger.warn(game.i18n.localize("MAGICITEMS.WarnNoMagicItemSpell") + this.name, true);
+            reject();
+          }
+          return;
+        }
         const pack = game.packs.find((p) => p.collection === this.pack);
         if (!pack) {
-          Logger.warn(`Cannot retrieve pack for if ${this.pack}`, true);
-        } else {
-          pack.getDocument(this.id)?.then((entity) => {
-            if (entity) {
-              resolve(entity);
-            } else {
-              Logger.warn(game.i18n.localize("MAGICITEMS.WarnNoMagicItemSpell") + this.name, true);
-              reject();
-            }
-          });
+          Logger.warn(`Cannot retrieve pack for ${this.pack}`, true);
+          reject();
+          return;
         }
-      }
+        pack.getDocument(this.id)?.then((packEntity) => {
+          if (packEntity) {
+            resolve(packEntity);
+          } else {
+            Logger.warn(game.i18n.localize("MAGICITEMS.WarnNoMagicItemSpell") + this.name, true);
+            reject();
+          }
+        });
+      });
     });
   }
 

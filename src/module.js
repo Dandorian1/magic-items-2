@@ -5,6 +5,7 @@ import { MagicItemActor } from "./scripts/magicitemactor.js";
 import { MagicItemSheet } from "./scripts/magicitemsheet.js";
 import { MagicItemTab } from "./scripts/magicItemtab.js";
 import { MagicItem } from "./scripts/magic-item/MagicItem.js";
+import "./scripts/integrations/argon.js";
 
 // CONFIG.debug.hooks = true;
 
