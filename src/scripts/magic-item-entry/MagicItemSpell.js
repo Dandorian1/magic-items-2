@@ -55,17 +55,31 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
         acts = [];
       }
     }
+    // Actor-derived spellcasting DC. dnd5e 5.x stores it under
+    // `actor.system.abilities[<spellcasting ability>].dc`; the legacy 4.x
+    // `attributes.spelldc` is read as a fallback for older actor data.
+    const spellcastingAb = actor.system?.attributes?.spellcasting;
+    const actorSpellDc =
+      (spellcastingAb && actor.system?.abilities?.[spellcastingAb]?.dc) ?? actor.system?.attributes?.spelldc ?? null;
+
     for (const a of acts) {
       // Save / attack roll column.
       if (!this.saveLabel) {
         const saveAb = a?.save?.ability;
         const ability = saveAb instanceof Set ? Array.from(saveAb)[0] : Array.isArray(saveAb) ? saveAb[0] : saveAb;
         if (ability) {
-          let dc = flatDc ?? a.save?.dc?.value;
-          if (!dc) {
-            const calc = a.save?.dc?.calculation;
-            if (calc === "spellcasting") dc = actor.system?.attributes?.spelldc;
-            else if (calc && actor.system?.abilities?.[calc]) dc = actor.system.abilities[calc].dc;
+          const calc = a.save?.dc?.calculation;
+          let dc;
+          if (flatDc) {
+            dc = flatDc;
+          } else if (calc === "spellcasting") {
+            // The activity's stored dc.value is meaningless on a compendium-
+            // loaded spell (ships as the base 8). Recompute from the actor.
+            dc = actorSpellDc ?? a.save?.dc?.value;
+          } else if (calc && actor.system?.abilities?.[calc]) {
+            dc = actor.system.abilities[calc].dc;
+          } else {
+            dc = a.save?.dc?.value;
           }
           this.saveLabel = dc ? `${abbr(ability)} ${dc}` : abbr(ability);
         } else if (a?.type === "attack" && a?.labels?.toHit) {

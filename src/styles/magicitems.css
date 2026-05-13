@@ -238,6 +238,22 @@
   position: relative;
 }
 
+.dnd5e2 .items-section .items-header .spell-save,
+.dnd5e2 .items-section .item .spell-save {
+  width: 70px;
+  justify-content: center;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.dnd5e2 .items-section .items-header .spell-formula,
+.dnd5e2 .items-section .item .spell-formula {
+  width: 100px;
+  justify-content: center;
+  padding: 0 4px;
+  text-align: center;
+}
+
 .dnd5e2 .items-section .items-header .feat-consumption,
 .dnd5e2 .items-section .item .feat-consumption {
   width: 70px;
