@@ -1,3 +1,7 @@
+### 4.2.7
+#### Features
+* The magic-items section of the spellbook tab now mirrors the native dnd5e row layout — added **Roll** (save DC or attack bonus) and **Formula** (damage parts) columns. Save labels read from the linked spell's `system.activities` entries (dnd5e 5.x) with a legacy `system.save` fallback. A flat DC override on the magic-item spell config still takes precedence.
+
 ### 4.2.6
 #### Bugfixes
 * Resolved "Your controlled Actor does not have a spell/feat named *X*" warning when casting a magic-item spell whose underlying entity is an **actor-embedded** item (created via drag-drop from the actor sheet). `AbstractMagicItemEntry.entity()` now tries `fromUuid(this.uuid)` first, which handles `Actor.<id>.Item.<id>` UUIDs that the previous `pack === "world"` branch missed by only consulting `CONFIG.Item.collection.instance`.

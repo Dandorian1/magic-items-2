@@ -68,6 +68,8 @@
     "MAGICITEMS.SheetCanUpcast": "Upcast",
     "MAGICITEMS.SheetCanUpcastYes": "yes",
     "MAGICITEMS.SheetCanUpcastNo": "no",
+    "MAGICITEMS.SheetRoll": "Roll",
+    "MAGICITEMS.SheetFormula": "Formula",
     "MAGICITEMS.SheetUsage": "Usage",
     "MAGICITEMS.SheetSortingMode": "Sorting Mode",
     "MAGICITEMS.SheetSortByLevel": "Level",

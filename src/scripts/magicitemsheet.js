@@ -60,6 +60,19 @@ export class MagicItemSheet {
    * @returns {Promise<void>}
    */
   async render() {
+    // Resolve display strings (save / formula) for each magic-item spell
+    // before the template runs. The values are read synchronously in the
+    // Handlebars template; this is the one async point where we can load
+    // the linked spell entity.
+    if (this.actor?.items?.length) {
+      const actor = this.actor.actor;
+      await Promise.all(
+        this.actor.items.flatMap((mi) =>
+          (mi.spells || []).map((spell) => spell.prepareDisplay?.(actor) ?? Promise.resolve()),
+        ),
+      );
+    }
+
     if (!this.actor?.isUsingNew5eSheet) {
       if (this.actor.hasItemsFeats()) {
         await this.renderTemplate(

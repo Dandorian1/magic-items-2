@@ -14,6 +14,101 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
     this.componentsVSM = this.componentsVSM;
     this.componentsALL = this.componentsALL;
     this.atkBonus = this.checkAtkBonus && this.atkBonus ? this.atkBonus : "";
+    // Populated by prepareDisplay() before sheet render. Defaults keep
+    // the template render correct if prepareDisplay was never called.
+    this.saveLabel = "";
+    this.formulaLabel = "";
+  }
+
+  /**
+   * Resolve the linked spell entity and compute the "ROLL" (save / to-hit)
+   * and "FORMULA" (damage) display strings shown in the magic-items section
+   * of the spellbook tab, matching the native dnd5e row layout.
+   *
+   * Reads dnd5e 5.x activity-system data (`system.activities`). Falls back
+   * to the legacy `system.save` / `system.damage.parts` shape for older
+   * spells that haven't been migrated.
+   */
+  async prepareDisplay(actor) {
+    this.saveLabel = "";
+    this.formulaLabel = "";
+    if (this.removed || !actor) return;
+    let spell;
+    try {
+      spell = await this.entity();
+    } catch (e) {
+      return;
+    }
+    if (!spell) return;
+
+    const abilities = CONFIG.DND5E?.abilities ?? {};
+    const abbr = (k) => (abilities[k]?.abbreviation ?? k ?? "").toUpperCase();
+    const flatDc = this.flatDc && this.dc ? Number(this.dc) : null;
+
+    // dnd5e 5.x activities — Collection or plain object.
+    const actsRaw = spell.system?.activities;
+    let acts = [];
+    if (actsRaw) {
+      try {
+        acts = Array.from(actsRaw.values?.() ?? Object.values(actsRaw));
+      } catch (e) {
+        acts = [];
+      }
+    }
+    for (const a of acts) {
+      // Save / attack roll column.
+      if (!this.saveLabel) {
+        const saveAb = a?.save?.ability;
+        const ability = saveAb instanceof Set ? Array.from(saveAb)[0] : Array.isArray(saveAb) ? saveAb[0] : saveAb;
+        if (ability) {
+          let dc = flatDc ?? a.save?.dc?.value;
+          if (!dc) {
+            const calc = a.save?.dc?.calculation;
+            if (calc === "spellcasting") dc = actor.system?.attributes?.spelldc;
+            else if (calc && actor.system?.abilities?.[calc]) dc = actor.system.abilities[calc].dc;
+          }
+          this.saveLabel = dc ? `${abbr(ability)} ${dc}` : abbr(ability);
+        } else if (a?.type === "attack" && a?.labels?.toHit) {
+          this.saveLabel = a.labels.toHit;
+        }
+      }
+      // Damage formula column.
+      if (!this.formulaLabel) {
+        if (Array.isArray(a?.labels?.damage) && a.labels.damage.length) {
+          this.formulaLabel = a.labels.damage
+            .map((p) => p.formula || p.label)
+            .filter(Boolean)
+            .join(" + ");
+        } else if (Array.isArray(a?.damage?.parts) && a.damage.parts.length) {
+          this.formulaLabel = a.damage.parts
+            .map((p) => p.formula || p.bonus)
+            .filter(Boolean)
+            .join(" + ");
+        }
+      }
+    }
+
+    // Legacy dnd5e (pre-activities) fallback.
+    if (!this.saveLabel) {
+      const save = spell.system?.save;
+      if (save?.ability) {
+        let dc = flatDc ?? save.dc;
+        if (!dc) {
+          if (save.scaling === "spell" || !save.scaling) dc = actor.system?.attributes?.spelldc;
+          else if (save.scaling !== "flat") dc = actor.system?.abilities?.[save.scaling]?.dc;
+        }
+        this.saveLabel = dc ? `${abbr(save.ability)} ${dc}` : abbr(save.ability);
+      }
+    }
+    if (!this.formulaLabel) {
+      const parts = spell.system?.damage?.parts;
+      if (Array.isArray(parts) && parts.length) {
+        this.formulaLabel = parts
+          .map((p) => (Array.isArray(p) ? p[0] : (p?.formula ?? p?.[0])))
+          .filter(Boolean)
+          .join(" + ");
+      }
+    }
   }
 
   get levels() {
