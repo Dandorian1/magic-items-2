@@ -486,3 +486,12 @@ Hooks.on("argonInit", () => {
     }
   });
 });
+
+// Test-only handle on file-private helpers. Not for production use.
+export const __test__ = {
+  buildButton,
+  preloadMagicItemSpellSources,
+  getSyntheticFlag,
+  injectMagicItemSpells,
+  invalidateSourceUuid,
+};

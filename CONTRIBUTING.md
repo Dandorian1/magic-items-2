@@ -63,8 +63,44 @@ the release CI rebuilds the binaries before zipping.
 | `npm run build:db` | Compile `src/packs/_source/<pack>/*.json` → `src/packs/<pack>/*.ldb`. |
 | `npm run build:json` | Inverse: extract LevelDB packs back to JSON sources. |
 | `npm run build:clean` | Re-normalize `src/packs/_source/` JSON (strip flags, fix whitespace). |
-| `npm run lint` / `lint:fix` | ESLint over `src/`. |
+| `npm run lint` / `lint:fix` | ESLint over `src/` and `tests/`. |
 | `npm run prettier-format` | Prettier-format `src/`. |
+| `npm test` | Run the vitest unit + integration suite once. |
+| `npm run test:watch` | Vitest in watch mode for the dev loop. |
+| `npm run test:coverage` | Generate HTML coverage report under `coverage/`. |
+
+## Running tests
+
+The repo has a vitest harness under `tests/`. Tests run against the source
+files under `src/` directly (not the built bundle) with a Foundry mock
+layer in `tests/setup.js`.
+
+```bash
+npm test                 # run once, exit on first failure
+npm run test:watch       # watch mode — reruns on file change
+npm run test:coverage    # HTML report under coverage/index.html
+```
+
+CI runs `npm test` and blocks PR merges on failure (alongside lint +
+prettier + build). The vitest suite is fast — currently ~120 tests
+in under 1 second.
+
+### Test conventions
+
+- One concern per file. Naming: `tests/unit/<area>.test.js` for unit
+  tests, `tests/integration/<flow>.test.js` for cross-helper flows.
+- Use the factories in `tests/helpers/factories.js` (`makeActor`,
+  `makeMagicItem`, `makeSpell`) instead of building fake docs inline.
+- The Foundry mock layer in `tests/setup.js` is reset before every
+  test (`beforeEach`). Per-test mock customizations live in the
+  test body, not in a separate setup file.
+- For private helpers tested via the `__test__` export (currently
+  in `OwnedMagicItemSpell.js` and `argon.js`): import via
+  `import { __test__ } from "..."; const { fn } = __test__;`. The
+  export is convention-only and not for production use.
+- **Convention:** every bug fix or new feature commit should include
+  at least one test that pins the new behaviour. Tests are easier
+  to write than smoke-test recipes are to remember.
 
 ## Project layout
 

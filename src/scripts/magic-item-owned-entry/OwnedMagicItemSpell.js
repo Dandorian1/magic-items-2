@@ -447,3 +447,13 @@ Hooks.once("ready", async () => {
     }
   }
 });
+
+// Test-only handle on file-private helpers. Not for production use.
+export const __test__ = {
+  buildSpellData,
+  iterActivities,
+  midiHasActiveWorkflow,
+  scheduleTransientCleanup,
+  safeDeleteTransient,
+  filterTransientsFromSheet,
+};

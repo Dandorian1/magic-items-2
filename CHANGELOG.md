@@ -1,3 +1,20 @@
+### 4.5.0
+#### Tech-debt phase 4 — automated test harness
+
+No runtime behaviour changes. This release ends the "manual smoke-test is the only thing standing between us and a regression" era — every shipped bug fix from 4.2.18 onward is now pinned by an automated test that CI runs on every push.
+
+* **`vitest` + `jsdom` + Foundry mock layer.** Tests run against the source files under `src/` directly (not the built bundle) with `tests/setup.js` installing global mocks for `Hooks`, `game`, `CONFIG`, `foundry.utils`, `foundry.applications.*`, `Roll`, `ChatMessage`, `ActiveEffect`, `fromUuid`/`fromUuidSync`, `canvas`, etc. `beforeEach` resets all mocks. Factories in `tests/helpers/factories.js` (`makeActor`, `makeMagicItem`, `makeSpell`) keep test code terse.
+* **113 tests across 8 unit files + 3 integration files.** All shipped regressions covered: B1–B6 (4.2.18), D1–D3 (4.3.0 activities), C6/C7 (4.4.0 dedup + activity-effect guard), A1 (4.4.0 WeakMap + synthetic-actor side index). Plus broader coverage: `MagicItemSpell.prepareDisplay` across both schemas, `MagicItemActor.buildItems` flag filter, Argon synthetic-spell flag detection, transient cleanup lifecycle hooks.
+* **`__test__` named exports** at the bottom of `src/scripts/magic-item-owned-entry/OwnedMagicItemSpell.js` and `src/scripts/integrations/argon.js` expose file-private helpers (`buildSpellData`, `iterActivities`, `midiHasActiveWorkflow`, `scheduleTransientCleanup`, `safeDeleteTransient`, `filterTransientsFromSheet`; `buildButton`, `preloadMagicItemSpellSources`, `getSyntheticFlag`, `injectMagicItemSpells`, `invalidateSourceUuid`) for direct unit testing. Marked test-only; not for production use.
+* **`hook-wiring.test.js`** asserts every documented `Hooks.on(...)` / `Hooks.once(...)` registration in `module.js` + `OwnedMagicItemSpell.js` + `argon.js` lands at module-load time. Catches "I deleted a hook by accident" regressions without a manual smoke test.
+
+#### CI
+* New `Run tests: npm test` step in `.github/workflows/ci.yml`, between the Prettier check and the compendium-pack compile. Failing tests block PR merges (the `build` job is already a required check on master via the branch ruleset).
+* `npm run lint` now lints both `src/` and `tests/`. `.eslintrc.json` gets a `tests/**/*` overrides block declaring vitest globals (`describe`, `it`, `expect`, `vi`, `beforeEach`, etc.) and relaxing the noisier JSDoc / unused-var rules for test code.
+
+#### Documentation
+* `CONTRIBUTING.md` gains a "Running tests" section: `npm test` / `npm run test:watch` / `npm run test:coverage`, the Foundry-mock-layer convention, the `__test__` export pattern, and "every bug fix or feature commit should include a test" as the going-forward rule.
+
 ### 4.4.0
 #### Tech-debt phase 3 — architecture cleanup
 No new functionality. Four targeted refactors that pay down the highest-leverage architecture debt while keeping the runtime contract identical for every user-visible path.

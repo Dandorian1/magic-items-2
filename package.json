@@ -2,7 +2,7 @@
   "name": "magicitems",
   "title": "Magic Items",
   "description": "Module that adds the ability to create magical items with spells or feats that belong to the item itself, such as staffs or magic wands, which will be automatically inherited from the character who owns the item.",
-  "version": "4.4.0",
+  "version": "4.5.0",
   "main": "module.js",
   "license": "SEE LICENSE IN LICENSE",
   "private": true,
@@ -23,6 +23,7 @@
     "@typescript-eslint/eslint-plugin": "^7.1.1",
     "@typhonjs-config/eslint-config": "^0.6.3",
     "@typhonjs-fvtt/eslint-config-foundry.js": "^0.8.0",
+    "@vitest/coverage-v8": "^1.6.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-jsdoc": "^46.10.1",
@@ -31,6 +32,7 @@
     "husky": "^8.0.3",
     "jquery": "^3.7.1",
     "jsdoc": "^4.0.2",
+    "jsdom": "^24.0.0",
     "less": "^4.2.0",
     "less-watch-compiler": "^1.16.3",
     "lint-staged": "^13.3.0",
@@ -43,6 +45,7 @@
     "vite-plugin-clean": "^1.0.0",
     "vite-plugin-run": "^0.5.1",
     "vite-plugin-static-copy": "^0.17.0",
+    "vitest": "^1.6.0",
     "yargs": "^17.7.2"
   },
   "browserslist": [
@@ -60,8 +63,11 @@
     "eslint": "eslint .",
     "prepare": "husky install",
     "prettier-format": "prettier --config .prettierrc.json --write \"./src/**/*.{js,mjs,json,scss,css}\"",
-    "lint": "eslint --ext .js ./src",
-    "lint:fix": "eslint --ext .js ./src --fix"
+    "lint": "eslint --ext .js ./src ./tests",
+    "lint:fix": "eslint --ext .js ./src ./tests --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "lint-staged": {
     "*.{js,css}": "prettier --write"

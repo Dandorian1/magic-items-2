@@ -26,6 +26,9 @@ jobs:
       - name: Prettier check
         run: npx prettier --check 'src/**/*.{js,mjs,json,scss,css}'
 
+      - name: Run tests
+        run: npm test
+
       - name: Compile compendium packs
         run: npm run build:db
 
