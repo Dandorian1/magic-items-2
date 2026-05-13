@@ -1,3 +1,7 @@
+### 4.2.6
+#### Bugfixes
+* Resolved "Your controlled Actor does not have a spell/feat named *X*" warning when casting a magic-item spell whose underlying entity is an **actor-embedded** item (created via drag-drop from the actor sheet). `AbstractMagicItemEntry.entity()` now tries `fromUuid(this.uuid)` first, which handles `Actor.<id>.Item.<id>` UUIDs that the previous `pack === "world"` branch missed by only consulting `CONFIG.Item.collection.instance`.
+
 ### 4.2.5
 #### Bugfixes
 * Removed `CONST.CHAT_MESSAGE_TYPES.OTHER` from the recharge `ChatMessage.create` payload — the constant was removed in Foundry v13 and reading it could short-circuit the post-recharge `update()` call.
