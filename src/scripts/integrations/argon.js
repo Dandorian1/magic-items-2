@@ -204,7 +204,18 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
     const group = {
       label: ownedMI.name,
       buttons,
-      uses: () => ({ max: ownedMI.charges, value: ownedMI.uses }),
+      // Argon's accordion-category header renders the X/▢ charge dots
+      // from these numbers; non-numeric (string or NaN) max/value causes
+      // the header to render blank. Magic-items default-pack data ships
+      // `charges` as a string (e.g. "10") so coerce explicitly.
+      uses: () => {
+        const max = Number(ownedMI.charges);
+        const value = Number(ownedMI.uses);
+        return {
+          max: Number.isFinite(max) ? max : 0,
+          value: Number.isFinite(value) ? value : 0,
+        };
+      },
     };
     newGroups.push(group);
     if (!existingItemsWithSpellsLabels.has(group.label)) buttonPanelButton.itemsWithSpells.push(group);
