@@ -47,6 +47,10 @@ function hasLibWrapper() {
 function applyWraps() {
   if (_ButtonPanelButtonCtor && !_wrappedPrepare) {
     const proto = _ButtonPanelButtonCtor.prototype;
+    // We need to mutate the returned array (which the ctor will then assign
+    // to `this._spells`). Touching `this._spells` from inside the wrap is
+    // useless — the ctor does `this._spells = prePrepareSpells()` *after*
+    // our wrap returns, overwriting any in-place edits.
     if (hasLibWrapper()) {
       libWrapper.register(
         CONSTANTS.MODULE_ID,
@@ -55,7 +59,7 @@ function applyWraps() {
         function (wrapped, ...args) {
           const result = wrapped.apply(this, args);
           try {
-            injectMagicItemSpells(this);
+            injectMagicItemSpells(this, result);
           } catch (e) {
             Logger.warn(`Argon prePrepareSpells injection failed: ${e?.message}`, false, e);
           }
@@ -68,7 +72,7 @@ function applyWraps() {
       proto.prePrepareSpells = function (...args) {
         const result = orig.apply(this, args);
         try {
-          injectMagicItemSpells(this);
+          injectMagicItemSpells(this, result);
         } catch (e) {
           Logger.warn(`Argon prePrepareSpells injection failed: ${e?.message}`, false, e);
         }
@@ -135,7 +139,7 @@ function getSyntheticFlag(buttonInstance) {
  * route them to `MagicItemActor.rollByName(...)` instead of `.use()`-ing
  * a non-embedded item.
  */
-function injectMagicItemSpells(buttonPanelButton) {
+function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   if (buttonPanelButton.type !== "spell") return;
   if (!_ItemButtonCtor) return;
   const actor = buttonPanelButton.actor;
@@ -143,11 +147,12 @@ function injectMagicItemSpells(buttonPanelButton) {
   const mia = MagicItemActor.get(actor.id);
   if (!mia?.items?.length) return;
 
-  const existingLabels = new Set((buttonPanelButton.itemsWithSpells ?? []).map((g) => g.label));
+  const existingItemsWithSpellsLabels = new Set((buttonPanelButton.itemsWithSpells ?? []).map((g) => g.label));
+  const existingPreparedLabels = new Set((Array.isArray(preparedSpells) ? preparedSpells : []).map((g) => g.label));
 
   for (const ownedMI of mia.items) {
     if (!ownedMI.active || !ownedMI.visible) continue;
-    if (existingLabels.has(ownedMI.name)) continue;
+    if (existingItemsWithSpellsLabels.has(ownedMI.name) && existingPreparedLabels.has(ownedMI.name)) continue;
     const ownedSpells = (ownedMI.ownedEntries ?? []).filter((e) => e.constructor?.name === "OwnedMagicItemSpell");
     if (!ownedSpells.length) continue;
 
@@ -163,10 +168,8 @@ function injectMagicItemSpells(buttonPanelButton) {
       buttons,
       uses: () => ({ max: ownedMI.charges, value: ownedMI.uses }),
     };
-    buttonPanelButton.itemsWithSpells.push(group);
-    if (Array.isArray(buttonPanelButton._spells) && !buttonPanelButton._spells.some((g) => g.label === group.label)) {
-      buttonPanelButton._spells.push(group);
-    }
+    if (!existingItemsWithSpellsLabels.has(group.label)) buttonPanelButton.itemsWithSpells.push(group);
+    if (Array.isArray(preparedSpells) && !existingPreparedLabels.has(group.label)) preparedSpells.push(group);
   }
 }
 
