@@ -180,6 +180,66 @@ function getSyntheticFlag(buttonInstance) {
  * route them to `MagicItemActor.rollByName(...)` instead of `.use()`-ing
  * a non-embedded item.
  */
+// UUIDs whose full document we've already asynchronously fetched (and
+// therefore know `fromUuidSync` will return the full doc, not the
+// compendium-index stub) — once warmed, the cache stays for the
+// lifetime of the page load.
+const _preloadedSourceUuids = new Set();
+// UUIDs currently being fetched. Tracked so we kick off one async fetch
+// per uuid even when `injectMagicItemSpells` runs multiple times before
+// the first fetch resolves.
+const _inflightSourceFetches = new Set();
+
+/**
+ * Async-warm the compendium document cache for every source spell
+ * referenced by an actor's magic items. Foundry's `fromUuidSync`
+ * returns the lite index entry for an unloaded compendium item (no
+ * `system.school`, `system.description`, `system.activities`, no
+ * `.toObject()`), but caches the full document on first `fromUuid`
+ * call and returns it from then on. Pre-warm the cache so the next
+ * `injectMagicItemSpells` pass builds buttons with full tooltip data.
+ *
+ * Triggers an `ui.ARGON.refresh()` after the first batch resolves so
+ * the user sees rich tooltips without a manual reload.
+ */
+function preloadMagicItemSpellSources(mia) {
+  const toFetch = [];
+  for (const ownedMI of mia?.items ?? []) {
+    for (const sp of ownedMI?.spells ?? []) {
+      const uuid = sp?.uuid;
+      if (!uuid) continue;
+      if (_preloadedSourceUuids.has(uuid)) continue;
+      if (_inflightSourceFetches.has(uuid)) continue;
+      _inflightSourceFetches.add(uuid);
+      toFetch.push(uuid);
+    }
+  }
+  if (!toFetch.length) return;
+  Promise.allSettled(
+    toFetch.map((uuid) =>
+      fromUuid(uuid)
+        .then(() => {
+          _preloadedSourceUuids.add(uuid);
+        })
+        .catch(() => {})
+        .finally(() => {
+          _inflightSourceFetches.delete(uuid);
+        }),
+    ),
+  ).then(() => {
+    // `ui.ARGON.refresh()` re-renders the HUD but doesn't re-construct
+    // the button-panel buttons whose ctor fires our `prePrepareSpells`
+    // wrap; call `rerunPrepareOnExistingButtons` to re-execute the
+    // injection (which now produces rich-tooltip buttons via the warm
+    // cache).
+    try {
+      rerunPrepareOnExistingButtons();
+    } catch (e) {
+      /* ignore */
+    }
+  });
+}
+
 function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   if (buttonPanelButton.type !== "spell") return;
   if (!_ItemButtonCtor) return;
@@ -187,6 +247,8 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   if (!actor) return;
   const mia = MagicItemActor.get(actor.id);
   if (!mia?.items?.length) return;
+
+  preloadMagicItemSpellSources(mia);
 
   // Argon's accordion-category header renders the X/▢ charge dots from
   // these numbers; non-numeric (string or NaN) max/value causes the

@@ -1,3 +1,7 @@
+### 4.2.17
+#### Bugfixes
+* Argon HUD hover-tooltips now show full info for **all** magic-item spells, not just ones that happen to have been cast (and therefore document-cached) earlier in the session. `fromUuidSync` returns only the compendium *index* entry for uncached items (no `school`/`description`/`activities`, no `toObject`), which is what caused 4.2.16 to show full tooltips for one spell on a staff while leaving the others as the "Nth Level undefined" stub. The integration now async-pre-fetches every magic-item spell's source document the first time it injects buttons for an actor, then re-runs the injection to rebuild buttons with rich data once the cache is warm.
+
 ### 4.2.16
 #### Bugfixes
 * Argon HUD hover-tooltips for magic-item spells now show full info (level, school, target, range, components, description, properties) instead of the previous "Nth Level undefined" stub. The synthetic spell document Argon's button is built from now copies the full `system` block from the source spell via `fromUuidSync(entry.uuid).toObject()`, falling back to a barebones doc only if the source can't be resolved.
