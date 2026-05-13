@@ -1,3 +1,7 @@
+### 4.2.8
+#### Features
+* **Argon Combat HUD integration.** When `enhancedcombathud-dnd5e` is active, magic-item spells now appear in the Cast Spell accordion grouped under the parent magic item's name (same shape Argon's own dnd5e 5.x "Cast Activity" path uses). Charges show in the section header; clicks route through `MagicItemActor.rollByName(...)` so charge consumption, upcast dialog, summons, and active-effect prompts all work. The integration uses libWrapper on `DND5eButtonPanelButton.prePrepareSpells` and `DND5eItemButton._onLeftClick`, captured lazily via Argon's `render<class>ArgonComponent` hooks — no edits to Argon's source files, no actor data writes, and a direct-patch fallback if libWrapper isn't installed.
+
 ### 4.2.7
 #### Features
 * The magic-items section of the spellbook tab now mirrors the native dnd5e row layout — added **Roll** (save DC or attack bonus) and **Formula** (damage parts) columns. Save labels read from the linked spell's `system.activities` entries (dnd5e 5.x) with a legacy `system.save` fallback. A flat DC override on the magic-item spell config still takes precedence.
