@@ -16,8 +16,13 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
     this.atkBonus = this.checkAtkBonus && this.atkBonus ? this.atkBonus : "";
     // Populated by prepareDisplay() before sheet render. Defaults keep
     // the template render correct if prepareDisplay was never called.
-    this.saveLabel = "";
-    this.formulaLabel = "";
+    // Structured to mirror the native dnd5e spell-row cells:
+    //   ROLL    .item-roll      → <span class="ability">…</span> + <span class="value">…</span>
+    //   FORMULA .item-formula   → repeated {formula, damageType, iconPath}
+    this.saveAbility = "";
+    this.saveDc = "";
+    this.attackLabel = "";
+    this.damageParts = [];
   }
 
   /**
@@ -30,8 +35,10 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
    * spells that haven't been migrated.
    */
   async prepareDisplay(actor) {
-    this.saveLabel = "";
-    this.formulaLabel = "";
+    this.saveAbility = "";
+    this.saveDc = "";
+    this.attackLabel = "";
+    this.damageParts = [];
     if (this.removed || !actor) return;
     let spell;
     try {
@@ -41,9 +48,20 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
     }
     if (!spell) return;
 
-    const abilities = CONFIG.DND5E?.abilities ?? {};
-    const abbr = (k) => (abilities[k]?.abbreviation ?? k ?? "").toUpperCase();
     const flatDc = this.flatDc && this.dc ? Number(this.dc) : null;
+    const damageTypes = CONFIG.DND5E?.damageTypes ?? {};
+    // Build a single formula/damageType part for the FORMULA cell.
+    const pushPart = (formula, damageType) => {
+      if (!formula) return;
+      const cfg = damageTypes[damageType] ?? {};
+      const iconPath = cfg.icon ?? (damageType ? `systems/dnd5e/icons/svg/damage/${damageType}.svg` : "");
+      this.damageParts.push({
+        formula,
+        damageType: damageType ?? "",
+        damageTypeLabel: cfg.label ?? "",
+        iconPath,
+      });
+    };
 
     // dnd5e 5.x activities — Collection or plain object.
     const actsRaw = spell.system?.activities;
@@ -63,8 +81,8 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
       (spellcastingAb && actor.system?.abilities?.[spellcastingAb]?.dc) ?? actor.system?.attributes?.spelldc ?? null;
 
     for (const a of acts) {
-      // Save / attack roll column.
-      if (!this.saveLabel) {
+      // ROLL column.
+      if (!this.saveAbility && !this.attackLabel) {
         const saveAb = a?.save?.ability;
         const ability = saveAb instanceof Set ? Array.from(saveAb)[0] : Array.isArray(saveAb) ? saveAb[0] : saveAb;
         if (ability) {
@@ -81,46 +99,46 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
           } else {
             dc = a.save?.dc?.value;
           }
-          this.saveLabel = dc ? `${abbr(ability)} ${dc}` : abbr(ability);
+          this.saveAbility = String(ability).toLowerCase();
+          this.saveDc = dc ?? "";
         } else if (a?.type === "attack" && a?.labels?.toHit) {
-          this.saveLabel = a.labels.toHit;
+          this.attackLabel = a.labels.toHit;
         }
       }
-      // Damage formula column.
-      if (!this.formulaLabel) {
+      // FORMULA column — collect every part once.
+      if (!this.damageParts.length) {
         if (Array.isArray(a?.labels?.damage) && a.labels.damage.length) {
-          this.formulaLabel = a.labels.damage
-            .map((p) => p.formula || p.label)
-            .filter(Boolean)
-            .join(" + ");
+          for (const p of a.labels.damage) pushPart(p.formula || p.label, p.damageType);
         } else if (Array.isArray(a?.damage?.parts) && a.damage.parts.length) {
-          this.formulaLabel = a.damage.parts
-            .map((p) => p.formula || p.bonus)
-            .filter(Boolean)
-            .join(" + ");
+          for (const p of a.damage.parts) {
+            const types = p?.types ? (p.types instanceof Set ? Array.from(p.types) : Array.from(p.types ?? [])) : [];
+            pushPart(p.formula || p.bonus, types[0]);
+          }
         }
       }
     }
 
     // Legacy dnd5e (pre-activities) fallback.
-    if (!this.saveLabel) {
+    if (!this.saveAbility && !this.attackLabel) {
       const save = spell.system?.save;
       if (save?.ability) {
         let dc = flatDc ?? save.dc;
         if (!dc) {
-          if (save.scaling === "spell" || !save.scaling) dc = actor.system?.attributes?.spelldc;
+          if (save.scaling === "spell" || !save.scaling) dc = actorSpellDc;
           else if (save.scaling !== "flat") dc = actor.system?.abilities?.[save.scaling]?.dc;
         }
-        this.saveLabel = dc ? `${abbr(save.ability)} ${dc}` : abbr(save.ability);
+        this.saveAbility = String(save.ability).toLowerCase();
+        this.saveDc = dc ?? "";
       }
     }
-    if (!this.formulaLabel) {
+    if (!this.damageParts.length) {
       const parts = spell.system?.damage?.parts;
       if (Array.isArray(parts) && parts.length) {
-        this.formulaLabel = parts
-          .map((p) => (Array.isArray(p) ? p[0] : (p?.formula ?? p?.[0])))
-          .filter(Boolean)
-          .join(" + ");
+        for (const p of parts) {
+          const formula = Array.isArray(p) ? p[0] : (p?.formula ?? p?.[0]);
+          const type = Array.isArray(p) ? p[1] : p?.type;
+          pushPart(formula, type);
+        }
       }
     }
   }

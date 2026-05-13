@@ -31,8 +31,8 @@
       <div class="item-header spell-level">{{localize "MAGICITEMS.SheetLevel"}}</div>
       <div class="item-header spell-consumption">{{localize "MAGICITEMS.SheetConsumption"}}</div>
       <div class="item-header spell-upcast">{{localize "MAGICITEMS.SheetCanUpcast"}}</div>
-      <div class="item-header spell-save">{{localize "MAGICITEMS.SheetRoll"}}</div>
-      <div class="item-header spell-formula">{{localize "MAGICITEMS.SheetFormula"}}</div>
+      <div class="item-header item-roll">{{localize "MAGICITEMS.SheetRoll"}}</div>
+      <div class="item-header item-formula">{{localize "MAGICITEMS.SheetFormula"}}</div>
     </div>
     <ol class="item-list unlist" >
       {{#each spells as |spell|}}
@@ -82,8 +82,34 @@
           <div class="item-detail spell-level">{{spell.level}}</div>
           <div class="item-detail spell-consumption">{{spell.consumption}}</div>
           <div class="item-detail spell-upcast">{{spell.canUpcastLabel}}</div>
-          <div class="item-detail spell-save">{{#if spell.saveLabel}}{{spell.saveLabel}}{{else}}-{{/if}}</div>
-          <div class="item-detail spell-formula">{{#if spell.formulaLabel}}{{spell.formulaLabel}}{{else}}-{{/if}}</div>
+          <div class="item-detail item-roll">
+            {{#if spell.saveAbility}}
+              <div class="stacked">
+                <span class="ability">{{spell.saveAbility}}</span>
+                {{#if spell.saveDc}}<span class="value">{{spell.saveDc}}</span>{{/if}}
+              </div>
+            {{else if spell.attackLabel}}
+              <div class="stacked"><span class="value">{{spell.attackLabel}}</span></div>
+            {{else}}
+              -
+            {{/if}}
+          </div>
+          <div class="item-detail item-formula">
+            {{#if spell.damageParts.length}}
+              <div class="row">
+                {{#each spell.damageParts}}
+                  <span class="formula">{{this.formula}}</span>
+                  {{#if this.iconPath}}
+                    <span data-tooltip="" aria-label="{{this.damageTypeLabel}}">
+                      <dnd5e-icon src="{{this.iconPath}}"></dnd5e-icon>
+                    </span>
+                  {{/if}}
+                {{/each}}
+              </div>
+            {{else}}
+              -
+            {{/if}}
+          </div>
         </div>
       </li>
       {{/each}}
@@ -123,8 +149,8 @@
           <div class="item-detail spell-level">-</div>
           <div class="item-detail spell-consumption">{{table.consumption}}</div>
           <div class="item-detail spell-upcast">-</div>
-          <div class="item-detail spell-save">-</div>
-          <div class="item-detail spell-formula">-</div>
+          <div class="item-detail item-roll">-</div>
+          <div class="item-detail item-formula">-</div>
         </div>
       </li>
       {{/each}} {{/if}}
