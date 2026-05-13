@@ -1,3 +1,7 @@
+### 4.2.9
+#### Bugfixes
+* Casting a magic-item spell via `MagicItemActor.rollByName` now lets midi-qol's Workflow complete — previously the Workflow created for the cast suspended at `WorkflowState_AwaitItemCard` (because `itemCardUuid` and `itemUseComplete` are only set inside `MidiActivity.use()`, which never fires for our transient non-embedded spell clone), so dice rolled into chat but HP changes never applied. `OwnedMagicItemSpell.roll` now locates the suspended Workflow by activity UUID immediately after `spell.use()` returns, fills in `itemCardUuid` + `itemUseComplete`, and kicks `performState(WorkflowState_Start)`. Guarded so non-midi installs are an unchanged no-op.
+
 ### 4.2.8
 #### Features
 * **Argon Combat HUD integration.** When `enhancedcombathud-dnd5e` is active, magic-item spells now appear in the Cast Spell accordion grouped under the parent magic item's name (same shape Argon's own dnd5e 5.x "Cast Activity" path uses). Charges show in the section header; clicks route through `MagicItemActor.rollByName(...)` so charge consumption, upcast dialog, summons, and active-effect prompts all work. The integration uses libWrapper on `DND5eButtonPanelButton.prePrepareSpells` and `DND5eItemButton._onLeftClick`, captured lazily via Argon's `render<class>ArgonComponent` hooks — no edits to Argon's source files, no actor data writes, and a direct-patch fallback if libWrapper isn't installed.

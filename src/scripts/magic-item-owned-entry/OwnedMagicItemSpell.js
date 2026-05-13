@@ -4,6 +4,62 @@ import { AbstractOwnedMagicItemEntry } from "./AbstractOwnedMagicItemEntry.js";
 import { MagicItemHelpers } from "../magic-item-helpers.js";
 import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
 
+/**
+ * Magicitems casts spells by building a transient (non-actor-embedded)
+ * Item5e clone and calling `spell.use(...)` on it. dnd5e 5.x's
+ * MidiActivity.use() is the only place where midi-qol's Workflow gets
+ * its `itemCardUuid` and `itemUseComplete` set — and it's only reached
+ * for real actor-embedded items. So midi creates a Workflow for our
+ * cast but it suspends at `WorkflowState_AwaitItemCard`: dice can roll
+ * into chat, but applyDamage / applyHealing never fire and HP never
+ * updates.
+ *
+ * After `spell.use()` returns, locate that suspended Workflow and set
+ * the two stalled fields, then kick the state machine forward. Every
+ * access is guarded so a midi-qol internal rename can't break casting.
+ */
+async function tryUnblockMidiWorkflow(spell, chatData) {
+  try {
+    const MQ = typeof globalThis.MidiQOL !== "undefined" ? globalThis.MidiQOL : null;
+    if (!MQ?.Workflow?.workflows) return;
+
+    const acts = spell?.system?.activities;
+    if (!acts) return;
+    let activityUuid;
+    try {
+      const first = Array.from(acts.values?.() ?? Object.values(acts))[0];
+      activityUuid = first?.uuid;
+    } catch (e) {
+      return;
+    }
+    if (!activityUuid) return;
+
+    let wf = MQ.Workflow.getWorkflow(activityUuid) ?? MQ.Workflow.getWorkflowByActivityUuid?.(activityUuid);
+    // `getWorkflowByActivityUuid` may hand back a `WeakRef` when midi's
+    // `useWeakReferences` setting is on. `getWorkflow` unwraps it
+    // internally, but be defensive in case we end up with the raw entry.
+    if (wf && typeof wf.deref === "function") wf = wf.deref();
+    if (!wf) return;
+
+    if (chatData && typeof chatData === "object" && chatData.uuid && !wf.itemCardUuid) {
+      wf.itemCardUuid = chatData.uuid;
+    }
+    if (!wf.itemUseComplete) wf.itemUseComplete = true;
+
+    if (typeof wf.performState === "function" && wf.WorkflowState_Start) {
+      try {
+        await wf.performState(wf.WorkflowState_Start, {});
+      } catch (e) {
+        // midi may already be advancing the workflow on its own once
+        // the two fields are set; a second nudge can race and throw.
+        Logger.debug(`midi workflow already advancing: ${e?.message}`);
+      }
+    }
+  } catch (e) {
+    Logger.warn(`magicitems: midi workflow patch failed: ${e?.message}`, false, e);
+  }
+}
+
 export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
   async roll() {
     let upcastLevel = this.item.level;
@@ -121,6 +177,7 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
           },
         },
       );
+      await tryUnblockMidiWorkflow(spell, chatData);
       if (chatData) {
         await this.consume(consumption);
         if (!this.magicItem.isDestroyed) {
