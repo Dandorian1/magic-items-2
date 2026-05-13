@@ -192,12 +192,23 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   // these numbers; non-numeric (string or NaN) max/value causes the
   // header to render blank. Default-pack magicitems data ships `charges`
   // as a string (e.g. "10"), so coerce explicitly.
-  const usesFromMagicItem = (ownedMI) => () => {
-    const max = Number(ownedMI.charges);
-    const value = Number(ownedMI.uses);
-    return {
-      max: Number.isFinite(max) ? max : 0,
-      value: Number.isFinite(value) ? value : 0,
+  //
+  // The closure resolves the *current* `OwnedMagicItem` by id on every
+  // call. After a cast, `MagicItemActor.buildItems()` (driven by our
+  // `updateItem` hook in module.js) replaces the in-memory instance
+  // with a fresh one carrying the post-cast `uses`. Capturing the
+  // instance directly would freeze the dots at the build-time value.
+  const usesFromMagicItem = (ownedMI) => {
+    const actorId = ownedMI.actor?.id ?? ownedMI.magicItemActor?.id;
+    const magicItemId = ownedMI.id ?? ownedMI.item?.id;
+    return () => {
+      const live = MagicItemActor.get(actorId)?.items?.find((i) => i.id === magicItemId) ?? ownedMI;
+      const max = Number(live.charges);
+      const value = Number(live.uses);
+      return {
+        max: Number.isFinite(max) ? max : 0,
+        value: Number.isFinite(value) ? value : 0,
+      };
     };
   };
 

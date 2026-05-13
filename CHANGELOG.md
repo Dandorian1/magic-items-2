@@ -1,3 +1,7 @@
+### 4.2.12
+#### Bugfixes
+* Completion of the 4.2.11 refresh fix on the Argon HUD side. The accordion-header `uses()` getter was capturing the `OwnedMagicItem` instance by closure, so when `MagicItemActor.buildItems()` rebuilt the actor's items into fresh instances post-cast, the closure still pointed at the dead one — Argon's X/▢ dots stayed at the pre-cast number even after `ui.ARGON.refresh()`. Reworked the closure to resolve the current `OwnedMagicItem` by id from `MagicItemActor.get(actorId).items` on every call, so each render reads the live `uses`. No-op when magicitems isn't bound.
+
 ### 4.2.11
 #### Bugfixes
 * The Magic Items section's "X / Y charges" display on the character sheet, the per-spell charge counter in the inventory row, and Argon Combat HUD's spell-accordion X/▢ charge dots now refresh as soon as charges change. Added a single `updateItem` hook that rebuilds the in-memory `MagicItemActor`, re-renders any open actor sheet apps for that actor, and calls `ui.ARGON.refresh()` when the change targets the active HUD actor. Previously the in-memory cache and Argon's accordion header both held the pre-cast number until the sheet was closed and reopened, leading to confusion when (correctly) the destroy check fired on a cast that drained the last charges.
