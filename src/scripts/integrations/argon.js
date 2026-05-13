@@ -193,26 +193,26 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   // header to render blank. Default-pack magicitems data ships `charges`
   // as a string (e.g. "10"), so coerce explicitly.
   //
-  // The closure captures the `MagicItemActor` instance directly (which
-  // is stable — its `.items` array gets replaced on rebuild) plus the
-  // magicitem document id. On each invocation it looks up the current
-  // `OwnedMagicItem` from `mia.items`. After a cast, our `updateItem`
-  // hook (`module.js`) calls `mia.buildItems()` which produces fresh
-  // `OwnedMagicItem` instances carrying the post-cast `uses`; the
-  // capture-by-MIA approach picks them up.
-  //
-  // We deliberately don't use `MagicItemActor.get(actorId)` here — when
-  // the integration's module-scope import resolves to a different
-  // `MAGICITEMS.actors` reference than the singleton being populated
-  // by `MagicItemActor.bind`, `.get()` returns undefined and the
-  // closure falls back to the build-time `ownedMI`, freezing the dots.
+  // The closure captures the actor + magicitem document id only, then
+  // reads `flags.magicitems.charges/uses` directly off the live Item5e
+  // on every invocation. This intentionally bypasses both the
+  // `MagicItemActor` singleton and any cached `OwnedMagicItem`
+  // instance: prior attempts (4.2.12 / 4.2.13) that captured the
+  // `MagicItemActor` or its `OwnedMagicItem` returned stale values
+  // because (a) the closure's `MagicItemActor` module reference does
+  // not always see the populated `MAGICITEMS.actors` singleton, and
+  // (b) `bind`ing an actor more than once replaces the singleton entry
+  // while leaving any captured MIA instance pointing at a frozen
+  // `.items` array. Reading the flag straight from the actor's Item5e
+  // is immune to both.
   const usesFromMagicItem = (ownedMI) => {
-    const mia = ownedMI.magicItemActor;
+    const actor = ownedMI.actor ?? ownedMI.magicItemActor?.actor;
     const magicItemId = ownedMI.id ?? ownedMI.item?.id;
     return () => {
-      const live = (mia?.items ?? []).find((i) => i.id === magicItemId) ?? ownedMI;
-      const max = Number(live.charges);
-      const value = Number(live.uses);
+      const item = actor?.items?.get?.(magicItemId);
+      const flags = item?.flags?.[CONSTANTS.MODULE_ID] ?? {};
+      const max = Number(flags.charges ?? ownedMI.charges);
+      const value = Number(flags.uses ?? ownedMI.uses);
       return {
         max: Number.isFinite(max) ? max : 0,
         value: Number.isFinite(value) ? value : 0,

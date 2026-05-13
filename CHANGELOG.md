@@ -1,3 +1,7 @@
+### 4.2.14
+#### Bugfixes
+* Argon stale-charge-dots: take 3. The 4.2.13 fix captured `ownedMI.magicItemActor` directly, but when `MagicItemActor.bind()` runs more than once for the same actor (e.g. on token creation after the initial `ready` pass), the singleton entry gets replaced with a fresh `MagicItemActor`; any closure holding the older one keeps reading its frozen `.items` array. Rewrote the closure to capture **only** the Foundry Actor reference and the magicitem document id, then read `flags.magicitems.charges/uses` straight from the live `Item5e` on every invocation. Immune to MIA re-binds and to module-scope import shenanigans.
+
 ### 4.2.13
 #### Bugfixes
 * Actually fix the Argon stale-charge-dots issue. The 4.2.12 attempt used `MagicItemActor.get(actorId)` inside the closure — in the built bundle that lookup returned `undefined` (the module-scope `MagicItemActor` reference doesn't see the populated `MAGICITEMS.actors` singleton from this scope, so `.get()` misses), and the closure silently fell back to the captured `ownedMI`, freezing the dots at the build-time value. Switched to capturing the `MagicItemActor` *instance* directly (`ownedMI.magicItemActor`) and reading `.items` off it each call — that reference is stable across rebuilds and resolves the live `OwnedMagicItem` correctly. Verified live: setFlag → flag changes → Argon's X/▢ dots reflect the new value within the next render tick.
