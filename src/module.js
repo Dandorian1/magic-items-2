@@ -237,6 +237,53 @@ Hooks.on("dnd5e.dropItemSheetData", (item, sheet, data) => {
   return false;
 });
 
+/**
+ * Keep downstream UIs in sync when a magic-item's flag block changes
+ * (typically because a spell cast just decremented `uses`).
+ *
+ *   - Rebuild the `MagicItemActor` so the in-memory `OwnedMagicItem.uses`
+ *     reflects the new flag value. The default `suspendListening` wrap
+ *     in `OwnedMagicItem.update()` blocks the rebuild that would
+ *     otherwise happen via an internal change listener, so we drive it
+ *     explicitly here from outside that wrap.
+ *   - Re-render any open actor sheet apps so the inline "X / Y charges"
+ *     display in the magic-items section of the spell tab refreshes.
+ *   - Refresh the Argon HUD for the active actor so its accordion-
+ *     header X/▢ charge dots read the new number; Argon only
+ *     auto-refreshes its portrait panel on `updateItem`, not the spell
+ *     accordion.
+ */
+Hooks.on("updateItem", async (item, change) => {
+  if (!foundry.utils.hasProperty(change, `flags.${CONSTANTS.MODULE_ID}`)) return;
+  const actor = item.parent;
+  if (!actor || actor.documentName !== "Actor") return;
+
+  const magicItemActor = MagicItemActor.get(actor.id);
+  if (magicItemActor) {
+    try {
+      await magicItemActor.buildItems();
+    } catch (e) {
+      /* non-fatal — UI may just be stale until next render */
+    }
+  }
+
+  for (const app of Object.values(actor.apps ?? {})) {
+    try {
+      app.render?.(false);
+    } catch (e) {
+      /* ignore — closing sheets can throw */
+    }
+  }
+
+  try {
+    if (typeof ui !== "undefined" && ui.ARGON?._actor?.id === actor.id && typeof ui.ARGON.refresh === "function") {
+      ui.ARGON.refresh();
+    }
+  } catch (e) {
+    /* ignore — Argon may not be installed or rendered */
+  }
+});
+
 let tidyApi;
 Hooks.once("tidy5e-sheet.ready", (api) => {
   tidyApi = api;
