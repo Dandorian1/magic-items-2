@@ -93,11 +93,16 @@ function applyWraps() {
     const interceptor = async function (wrappedOrEvent, maybeEvent) {
       const usingWrapper = typeof wrappedOrEvent === "function";
       const event = usingWrapper ? maybeEvent : wrappedOrEvent;
-      const syn = getSyntheticFlag(this);
-      if (syn) {
+      // Two routes lead here:
+      //  - synthetic spell buttons we built ourselves carry
+      //    `flags.magicitems.syntheticSpell` on `this.item`
+      //  - native cachedFor spell buttons whose parent group we upgraded
+      //    carry `_magicitemsRedirect` on the button instance
+      const redirect = this?._magicitemsRedirect ?? getSyntheticFlag(this);
+      if (redirect) {
         const mia = MagicItemActor.get(this.actor?.id);
         if (mia) {
-          mia.rollByName(syn.magicItemName, syn.spellName);
+          mia.rollByName(redirect.magicItemName, redirect.spellName);
           return;
         }
       }
@@ -212,6 +217,21 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
     const ownedMI = namesToMagicItem.get(group?.label);
     if (!ownedMI) return false;
     group.uses = usesFromMagicItem(ownedMI);
+    // Also tag each button so the click interceptor reroutes the cast
+    // through `MagicItemActor.rollByName` — the dnd5e Cast-Activity flow
+    // would otherwise consume `system.uses` on the staff (1 flat) rather
+    // than the per-spell consumption configured in magicitems
+    // (e.g. 5 charges for Mass Cure Wounds, 1 for Cure Wounds).
+    const spellsByName = new Map();
+    for (const e of ownedMI.ownedEntries ?? []) {
+      if (e?.constructor?.name === "OwnedMagicItemSpell" && e.name) spellsByName.set(e.name, e);
+    }
+    for (const btn of group.buttons ?? []) {
+      const spellName = btn?.item?.name ?? btn?._item?.name ?? btn?._item?.item?.name;
+      if (spellName && spellsByName.has(spellName)) {
+        btn._magicitemsRedirect = { magicItemName: ownedMI.name, spellName };
+      }
+    }
     return true;
   };
   for (const g of buttonPanelButton.itemsWithSpells ?? []) upgradeNativeGroup(g);
