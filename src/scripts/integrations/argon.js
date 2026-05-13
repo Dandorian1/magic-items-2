@@ -93,16 +93,15 @@ function applyWraps() {
     const interceptor = async function (wrappedOrEvent, maybeEvent) {
       const usingWrapper = typeof wrappedOrEvent === "function";
       const event = usingWrapper ? maybeEvent : wrappedOrEvent;
-      // Two routes lead here:
-      //  - synthetic spell buttons we built ourselves carry
-      //    `flags.magicitems.syntheticSpell` on `this.item`
-      //  - native cachedFor spell buttons whose parent group we upgraded
-      //    carry `_magicitemsRedirect` on the button instance
-      const redirect = this?._magicitemsRedirect ?? getSyntheticFlag(this);
-      if (redirect) {
+      // Only short-circuit for our synthetic spell buttons (the ones we
+      // built when no native cachedFor entry existed). Buttons in a
+      // native cachedFor group fall through to dnd5e/midi's flow so the
+      // workflow runs end-to-end and HP changes apply.
+      const syn = getSyntheticFlag(this);
+      if (syn) {
         const mia = MagicItemActor.get(this.actor?.id);
         if (mia) {
-          mia.rollByName(redirect.magicItemName, redirect.spellName);
+          mia.rollByName(syn.magicItemName, syn.spellName);
           return;
         }
       }
@@ -216,22 +215,23 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   const upgradeNativeGroup = (group) => {
     const ownedMI = namesToMagicItem.get(group?.label);
     if (!ownedMI) return false;
+    // Fix only the charge counter on a native cachedFor group. We deliberately
+    // do NOT reroute clicks on the group's buttons through rollByName: those
+    // buttons hold real actor-embedded spell items that midi-qol's workflow
+    // can roll & apply (damage/heal) correctly. Rerouting through
+    // `OwnedMagicItemSpell.roll` builds a *transient* (non-embedded) clone
+    // and calls `spell.use()` on it — midi creates a workflow but never
+    // completes it (`#itemUseComplete: false`), so dice may roll but HP
+    // changes never apply. Leaving the click alone keeps the proven dnd5e
+    // / midi flow intact for these groups.
+    //
+    // Trade-off: dnd5e's Cast-Activity consumption (often "1 use of this
+    // item") still applies to the staff's `system.uses`, which doesn't
+    // match the magicitems per-spell `consumption` config. To make the
+    // numbers line up the user can either delete the cachedFor / Cast
+    // Activity setup so magicitems handles casting end-to-end, or edit
+    // each Cast Activity's consumption to deduct the right amount.
     group.uses = usesFromMagicItem(ownedMI);
-    // Also tag each button so the click interceptor reroutes the cast
-    // through `MagicItemActor.rollByName` — the dnd5e Cast-Activity flow
-    // would otherwise consume `system.uses` on the staff (1 flat) rather
-    // than the per-spell consumption configured in magicitems
-    // (e.g. 5 charges for Mass Cure Wounds, 1 for Cure Wounds).
-    const spellsByName = new Map();
-    for (const e of ownedMI.ownedEntries ?? []) {
-      if (e?.constructor?.name === "OwnedMagicItemSpell" && e.name) spellsByName.set(e.name, e);
-    }
-    for (const btn of group.buttons ?? []) {
-      const spellName = btn?.item?.name ?? btn?._item?.name ?? btn?._item?.item?.name;
-      if (spellName && spellsByName.has(spellName)) {
-        btn._magicitemsRedirect = { magicItemName: ownedMI.name, spellName };
-      }
-    }
     return true;
   };
   for (const g of buttonPanelButton.itemsWithSpells ?? []) upgradeNativeGroup(g);
