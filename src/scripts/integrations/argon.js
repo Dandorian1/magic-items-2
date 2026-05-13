@@ -187,6 +187,7 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   const existingItemsWithSpellsLabels = new Set((buttonPanelButton.itemsWithSpells ?? []).map((g) => g.label));
   const existingPreparedLabels = new Set((Array.isArray(preparedSpells) ? preparedSpells : []).map((g) => g.label));
 
+  const newGroups = [];
   for (const ownedMI of mia.items) {
     if (!ownedMI.active || !ownedMI.visible) continue;
     if (existingItemsWithSpellsLabels.has(ownedMI.name) && existingPreparedLabels.has(ownedMI.name)) continue;
@@ -205,8 +206,18 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
       buttons,
       uses: () => ({ max: ownedMI.charges, value: ownedMI.uses }),
     };
+    newGroups.push(group);
     if (!existingItemsWithSpellsLabels.has(group.label)) buttonPanelButton.itemsWithSpells.push(group);
-    if (Array.isArray(preparedSpells) && !existingPreparedLabels.has(group.label)) preparedSpells.push(group);
+  }
+
+  // Splice our groups at the head of the returned spells array so they
+  // render before Cantrip / level buckets — matching where Argon's own
+  // `cachedFor` magic-items path puts the `itemsWithSpells` entries
+  // (`[...this.itemsWithSpells, atwill, innate, ...levels]`). Filter out
+  // any duplicates already present.
+  if (Array.isArray(preparedSpells) && newGroups.length) {
+    const toAdd = newGroups.filter((g) => !existingPreparedLabels.has(g.label));
+    if (toAdd.length) preparedSpells.unshift(...toAdd);
   }
 }
 
