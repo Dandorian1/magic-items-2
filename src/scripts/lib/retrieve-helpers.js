@@ -5,17 +5,16 @@ const CompendiumCollectionClass =
 
 export class RetrieveHelpers {
   /**
-   *
-   * @param {options}
-   * @param {string} [options.documentName]
-   * @param {string} [options.documentId]
-   * @param {("User"|"Folder"|"Actor"|"Item"|"Scene"|"Combat"|"JournalEntry"|"Macro"|"Playlist"|"RollTable"|"Cards"|"ChatMessage"|"Setting"|"FogExploration")} [options.collection]
-   * @param {string} [options.documentPack]
-   * @param {boolean} [options.ignoreError=false]
+   * @param {object} opts
+   * @param {string} [opts.documentName]
+   * @param {string} [opts.documentId]
+   * @param {string} [opts.documentCollectionType]
+   * @param {string} [opts.documentPack]
+   * @param {boolean} [opts.ignoreError=false]
    */
   static retrieveUuid({ documentName, documentId, documentCollectionType, documentPack, ignoreError = false }) {
     let uuid = null;
-    if (documentCollectionType || pack === "world") {
+    if (documentCollectionType || documentPack === "world") {
       const collection = game.collections.get(documentCollectionType);
       if (!collection) {
         // DO NOTHING
@@ -91,14 +90,14 @@ export class RetrieveHelpers {
     if (RetrieveHelpers.stringIsUuid(target)) {
       return target;
     }
-    const document = getDocument(target);
+    const document = RetrieveHelpers.getDocument(target);
     return document?.uuid ?? false;
   }
 
   static getCompendiumCollectionSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`CompendiumCollection is undefined`, true, targetTmp);
+      throw Logger.error("CompendiumCollection is undefined", true, targetTmp);
     }
     if (targetTmp instanceof CompendiumCollectionClass) {
       return targetTmp;
@@ -126,19 +125,19 @@ export class RetrieveHelpers {
     // }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`CompendiumCollection is not found`, false, targetTmp);
+        Logger.warn("CompendiumCollection is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`CompendiumCollection is not found`, true, targetTmp);
+        throw Logger.error("CompendiumCollection is not found", true, targetTmp);
       }
     }
     // Type checking
     if (!(targetTmp instanceof CompendiumCollectionClass)) {
       if (ignoreError) {
-        Logger.warn(`Invalid CompendiumCollection`, false, targetTmp);
+        Logger.warn("Invalid CompendiumCollection", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Invalid CompendiumCollection`, true, targetTmp);
+        throw Logger.error("Invalid CompendiumCollection", true, targetTmp);
       }
     }
     return targetTmp;
@@ -147,7 +146,7 @@ export class RetrieveHelpers {
   static async getCompendiumCollectionAsync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`CompendiumCollection is undefined`, true, targetTmp);
+      throw Logger.error("CompendiumCollection is undefined", true, targetTmp);
     }
     if (targetTmp instanceof CompendiumCollectionClass) {
       return targetTmp;
@@ -174,19 +173,19 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`CompendiumCollection is not found`, false, targetTmp);
+        Logger.warn("CompendiumCollection is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`CompendiumCollection is not found`, true, targetTmp);
+        throw Logger.error("CompendiumCollection is not found", true, targetTmp);
       }
     }
     // Type checking
     if (!(targetTmp instanceof CompendiumCollectionClass)) {
       if (ignoreError) {
-        Logger.warn(`Invalid CompendiumCollection`, false, targetTmp);
+        Logger.warn("Invalid CompendiumCollection", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Invalid CompendiumCollection`, true, targetTmp);
+        throw Logger.error("Invalid CompendiumCollection", true, targetTmp);
       }
     }
     return targetTmp;
@@ -195,7 +194,7 @@ export class RetrieveHelpers {
   static getUserSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`User is undefined`, true, targetTmp);
+      throw Logger.error("User is undefined", true, targetTmp);
     }
     if (targetTmp instanceof User) {
       return targetTmp;
@@ -222,10 +221,10 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`User is not found`, false, targetTmp);
+        Logger.warn("User is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`User is not found`, true, targetTmp);
+        throw Logger.error("User is not found", true, targetTmp);
       }
     }
     // Type checking
@@ -243,7 +242,7 @@ export class RetrieveHelpers {
   static getActorSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Actor is undefined`, true, targetTmp);
+      throw Logger.error("Actor is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Actor) {
       return targetTmp;
@@ -270,10 +269,10 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Actor is not found`, false, targetTmp);
+        Logger.warn("Actor is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Actor is not found`, true, targetTmp);
+        throw Logger.error("Actor is not found", true, targetTmp);
       }
     }
     // Type checking
@@ -291,7 +290,7 @@ export class RetrieveHelpers {
   static async getActorAsync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Actor is undefined`, true, targetTmp);
+      throw Logger.error("Actor is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Actor) {
       return targetTmp;
@@ -318,19 +317,19 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Actor is not found`, false, targetTmp);
+        Logger.warn("Actor is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Actor is not found`, true, targetTmp);
+        throw Logger.error("Actor is not found", true, targetTmp);
       }
     }
     // Type checking
     if (!(targetTmp instanceof Actor)) {
       if (ignoreError) {
-        Logger.warn(`Invalid Actor`, false, targetTmp);
+        Logger.warn("Invalid Actor", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Invalid Actor`, true, targetTmp);
+        throw Logger.error("Invalid Actor", true, targetTmp);
       }
     }
     return targetTmp;
@@ -339,7 +338,7 @@ export class RetrieveHelpers {
   static getJournalSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Journal is undefined`, true, targetTmp);
+      throw Logger.error("Journal is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Journal) {
       return targetTmp;
@@ -366,10 +365,10 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Journal is not found`, false, targetTmp);
+        Logger.warn("Journal is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Journal is not found`, true, targetTmp);
+        throw Logger.error("Journal is not found", true, targetTmp);
       }
     }
     // Type checking
@@ -387,7 +386,7 @@ export class RetrieveHelpers {
   static async getJournalAsync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Journal is undefined`, true, targetTmp);
+      throw Logger.error("Journal is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Journal) {
       return targetTmp;
@@ -414,19 +413,19 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Journal is not found`, false, targetTmp);
+        Logger.warn("Journal is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Journal is not found`, true, targetTmp);
+        throw Logger.error("Journal is not found", true, targetTmp);
       }
     }
     // Type checking
     if (!(targetTmp instanceof Journal)) {
       if (ignoreError) {
-        Logger.warn(`Invalid Journal`, false, targetTmp);
+        Logger.warn("Invalid Journal", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Invalid Journal`, true, targetTmp);
+        throw Logger.error("Invalid Journal", true, targetTmp);
       }
     }
     return targetTmp;
@@ -435,7 +434,7 @@ export class RetrieveHelpers {
   static getMacroSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Macro is undefined`, true, targetTmp);
+      throw Logger.error("Macro is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Macro) {
       return targetTmp;
@@ -462,10 +461,10 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Macro is not found`, false, targetTmp);
+        Logger.warn("Macro is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Macro is not found`, true, targetTmp);
+        throw Logger.error("Macro is not found", true, targetTmp);
       }
     }
     // Type checking
@@ -483,7 +482,7 @@ export class RetrieveHelpers {
   static async getMacroAsync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Macro is undefined`, true, targetTmp);
+      throw Logger.error("Macro is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Macro) {
       return targetTmp;
@@ -510,19 +509,19 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Macro is not found`, false, targetTmp);
+        Logger.warn("Macro is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Macro is not found`, true, targetTmp);
+        throw Logger.error("Macro is not found", true, targetTmp);
       }
     }
     // Type checking
     if (!(targetTmp instanceof Macro)) {
       if (ignoreError) {
-        Logger.warn(`Invalid Macro`, false, targetTmp);
+        Logger.warn("Invalid Macro", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Invalid Macro`, true, targetTmp);
+        throw Logger.error("Invalid Macro", true, targetTmp);
       }
     }
     return targetTmp;
@@ -531,7 +530,7 @@ export class RetrieveHelpers {
   static getSceneSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Scene is undefined`, true, targetTmp);
+      throw Logger.error("Scene is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Scene) {
       return targetTmp;
@@ -558,10 +557,10 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Scene is not found`, false, targetTmp);
+        Logger.warn("Scene is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Scene is not found`, true, targetTmp);
+        throw Logger.error("Scene is not found", true, targetTmp);
       }
     }
     // Type checking
@@ -579,7 +578,7 @@ export class RetrieveHelpers {
   static async getSceneAsync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Scene is undefined`, true, targetTmp);
+      throw Logger.error("Scene is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Scene) {
       return targetTmp;
@@ -606,19 +605,19 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Scene is not found`, false, targetTmp);
+        Logger.warn("Scene is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Scene is not found`, true, targetTmp);
+        throw Logger.error("Scene is not found", true, targetTmp);
       }
     }
     // Type checking
     if (!(targetTmp instanceof Scene)) {
       if (ignoreError) {
-        Logger.warn(`Invalid Scene`, false, targetTmp);
+        Logger.warn("Invalid Scene", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Invalid Scene`, true, targetTmp);
+        throw Logger.error("Invalid Scene", true, targetTmp);
       }
     }
     return targetTmp;
@@ -627,7 +626,7 @@ export class RetrieveHelpers {
   static getItemSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Item is undefined`, true, targetTmp);
+      throw Logger.error("Item is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Item) {
       return targetTmp;
@@ -654,10 +653,10 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Item is not found`, false, targetTmp);
+        Logger.warn("Item is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Item is not found`, true, targetTmp);
+        throw Logger.error("Item is not found", true, targetTmp);
       }
     }
     // Type checking
@@ -675,7 +674,7 @@ export class RetrieveHelpers {
   static async getItemAsync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Item is undefined`, true, targetTmp);
+      throw Logger.error("Item is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Item) {
       return targetTmp;
@@ -702,19 +701,19 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Item is not found`, false, targetTmp);
+        Logger.warn("Item is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Item is not found`, true, targetTmp);
+        throw Logger.error("Item is not found", true, targetTmp);
       }
     }
     // Type checking
     if (!(targetTmp instanceof Item)) {
       if (ignoreError) {
-        Logger.warn(`Invalid Item`, false, targetTmp);
+        Logger.warn("Invalid Item", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Invalid Item`, true, targetTmp);
+        throw Logger.error("Invalid Item", true, targetTmp);
       }
     }
     return targetTmp;
@@ -723,7 +722,7 @@ export class RetrieveHelpers {
   static getPlaylistSoundPathSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`PlaylistSound is undefined`, true, targetTmp);
+      throw Logger.error("PlaylistSound is undefined", true, targetTmp);
     }
     if (targetTmp instanceof PlaylistSound) {
       return targetTmp.path;
@@ -753,10 +752,10 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`PlaylistSound is not found`, false, targetTmp);
+        Logger.warn("PlaylistSound is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`PlaylistSound is not found`, true, targetTmp);
+        throw Logger.error("PlaylistSound is not found", true, targetTmp);
       }
     }
     // Type checking
@@ -774,7 +773,7 @@ export class RetrieveHelpers {
   static async getPlaylistSoundPathAsync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`PlaylistSound is undefined`, true, targetTmp);
+      throw Logger.error("PlaylistSound is undefined", true, targetTmp);
     }
     if (targetTmp instanceof PlaylistSound) {
       return targetTmp.path;
@@ -804,19 +803,19 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`PlaylistSound is not found`, false, targetTmp);
+        Logger.warn("PlaylistSound is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`PlaylistSound is not found`, true, targetTmp);
+        throw Logger.error("PlaylistSound is not found", true, targetTmp);
       }
     }
     // Type checking
     if (!(targetTmp instanceof PlaylistSound)) {
       if (ignoreError) {
-        Logger.warn(`Invalid PlaylistSound`, false, targetTmp);
+        Logger.warn("Invalid PlaylistSound", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Invalid PlaylistSound`, true, targetTmp);
+        throw Logger.error("Invalid PlaylistSound", true, targetTmp);
       }
     }
     return targetTmp.path;
@@ -825,7 +824,7 @@ export class RetrieveHelpers {
   static getTokenSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`Token is undefined`, true, targetTmp);
+      throw Logger.error("Token is undefined", true, targetTmp);
     }
     if (targetTmp instanceof Token) {
       return targetTmp;
@@ -842,10 +841,10 @@ export class RetrieveHelpers {
       }
       if (!targetTmp) {
         if (ignoreError) {
-          Logger.warn(`Token is not found`, false, targetTmp);
+          Logger.warn("Token is not found", false, targetTmp);
           return;
         } else {
-          throw Logger.error(`Token is not found`, true, targetTmp);
+          throw Logger.error("Token is not found", true, targetTmp);
         }
       }
       return targetTmp;
@@ -874,10 +873,10 @@ export class RetrieveHelpers {
     }
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`Token is not found`, false, targetTmp);
+        Logger.warn("Token is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Token is not found`, true, targetTmp);
+        throw Logger.error("Token is not found", true, targetTmp);
       }
     }
     targetTmp = targetTmp?.token ?? targetTmp;
@@ -899,7 +898,7 @@ export class RetrieveHelpers {
   static getRollTableSync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`RollTable is undefined`, true, targetTmp);
+      throw Logger.error("RollTable is undefined", true, targetTmp);
     }
     if (targetTmp instanceof RollTable) {
       return targetTmp;
@@ -927,10 +926,10 @@ export class RetrieveHelpers {
 
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`RollTable is not found`, false, targetTmp);
+        Logger.warn("RollTable is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`RollTable is not found`, true, targetTmp);
+        throw Logger.error("RollTable is not found", true, targetTmp);
       }
     }
     // Type checking
@@ -948,7 +947,7 @@ export class RetrieveHelpers {
   static async getRollTableAsync(target, ignoreError = false, ignoreName = true) {
     let targetTmp = target;
     if (!targetTmp) {
-      throw Logger.error(`RollTable is undefined`, true, targetTmp);
+      throw Logger.error("RollTable is undefined", true, targetTmp);
     }
     if (targetTmp instanceof RollTable) {
       return targetTmp;
@@ -976,19 +975,19 @@ export class RetrieveHelpers {
 
     if (!targetTmp) {
       if (ignoreError) {
-        Logger.warn(`RollTable is not found`, false, targetTmp);
+        Logger.warn("RollTable is not found", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`RollTable is not found`, true, targetTmp);
+        throw Logger.error("RollTable is not found", true, targetTmp);
       }
     }
     // Type checking
     if (!(targetTmp instanceof RollTable)) {
       if (ignoreError) {
-        Logger.warn(`Invalid RollTable`, false, targetTmp);
+        Logger.warn("Invalid RollTable", false, targetTmp);
         return;
       } else {
-        throw Logger.error(`Invalid RollTable`, true, targetTmp);
+        throw Logger.error("Invalid RollTable", true, targetTmp);
       }
     }
     return targetTmp;

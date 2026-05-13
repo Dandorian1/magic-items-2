@@ -33,6 +33,9 @@ let _ItemButtonCtor = null;
 let _wrappedPrepare = false;
 let _wrappedClick = false;
 
+/**
+ *
+ */
 function hasLibWrapper() {
   return typeof libWrapper === "object" && typeof libWrapper.register === "function";
 }
@@ -157,6 +160,7 @@ function rerunPrepareOnExistingButtons() {
  * Read our synthetic-spell flag off whichever shape the button instance
  * exposes the underlying item as. Different Argon code paths assign it
  * to `_item`, `item`, or `_item.item`; check all three.
+ * @param buttonInstance
  */
 function getSyntheticFlag(buttonInstance) {
   const candidates = [buttonInstance?.item, buttonInstance?._item, buttonInstance?._item?.item];
@@ -191,6 +195,33 @@ const _preloadedSourceUuids = new Set();
 const _inflightSourceFetches = new Set();
 
 /**
+ * Invalidate a single uuid in the preload cache. The GM editing a
+ * compendium spell mid-session needs the next `injectMagicItemSpells`
+ * call to re-fetch it instead of trusting our previous Set membership.
+ * Foundry's own `fromUuid` cache is separate; calling `fromUuid` again
+ * after a compendium edit returns the new document, so re-warming
+ * picks up the change.
+ * @param uuid
+ */
+function invalidateSourceUuid(uuid) {
+  if (!uuid) return;
+  _preloadedSourceUuids.delete(uuid);
+  _inflightSourceFetches.delete(uuid);
+}
+
+// Spell-source compendium updates: invalidate the cache entry so the
+// next Argon render rebuilds the synthetic tooltip data from the fresh
+// document.
+Hooks.on("updateItem", (item) => {
+  if (item?.type !== "spell") return;
+  if (item.uuid) invalidateSourceUuid(item.uuid);
+});
+Hooks.on("deleteItem", (item) => {
+  if (item?.type !== "spell") return;
+  if (item.uuid) invalidateSourceUuid(item.uuid);
+});
+
+/**
  * Async-warm the compendium document cache for every source spell
  * referenced by an actor's magic items. Foundry's `fromUuidSync`
  * returns the lite index entry for an unloaded compendium item (no
@@ -201,6 +232,7 @@ const _inflightSourceFetches = new Set();
  *
  * Triggers an `ui.ARGON.refresh()` after the first batch resolves so
  * the user sees rich tooltips without a manual reload.
+ * @param mia
  */
 function preloadMagicItemSpellSources(mia) {
   const toFetch = [];
@@ -235,11 +267,16 @@ function preloadMagicItemSpellSources(mia) {
     try {
       rerunPrepareOnExistingButtons();
     } catch (e) {
-      /* ignore */
+      /* Ignore */
     }
   });
 }
 
+/**
+ *
+ * @param buttonPanelButton
+ * @param preparedSpells
+ */
 function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   if (buttonPanelButton.type !== "spell") return;
   if (!_ItemButtonCtor) return;
@@ -375,6 +412,9 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
  * are indexed at world load), so the lookup is cheap and reliable.
  * Falls back to a barebones doc if the uuid can't be resolved
  * (deleted source, broken reference) so the button still renders.
+ * @param actor
+ * @param ownedMI
+ * @param ownedSpell
  */
 function buildButton(actor, ownedMI, ownedSpell) {
   const entry = ownedSpell?.item ?? ownedSpell;

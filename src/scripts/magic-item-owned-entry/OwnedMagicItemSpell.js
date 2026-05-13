@@ -10,6 +10,8 @@ const TRANSIENT_FLAG = "transient";
 /**
  * Delete an embedded transient spell from its parent actor, swallowing
  * errors (the document may already be gone if a parallel cleanup ran).
+ * @param actor
+ * @param itemId
  */
 async function safeDeleteTransient(actor, itemId) {
   if (!actor || !itemId) return;
@@ -22,36 +24,122 @@ async function safeDeleteTransient(actor, itemId) {
 }
 
 /**
- * Build the data payload for a real embedded spell document. Same shape
- * the old transient code path produced, plus a magicitems-only flag so
- * the on-load orphan sweep and the render-time spellbook filter can
- * find it.
+ * Iterate `data.system.activities` regardless of whether toObject()
+ * serialised it as a Map-shaped object (`{<id>: {...}}`), a plain
+ * array, or already a Collection. Yields each activity-data sub-object
+ * so the caller can mutate it in place.
+ * @param systemData
+ */
+function* iterActivities(systemData) {
+  const acts = systemData?.activities;
+  if (!acts) return;
+  if (Array.isArray(acts)) {
+    for (const a of acts) if (a) yield a;
+  } else if (typeof acts.values === "function") {
+    for (const a of acts.values()) if (a) yield a;
+  } else if (typeof acts === "object") {
+    for (const k of Object.keys(acts)) {
+      const a = acts[k];
+      if (a && typeof a === "object") yield a;
+    }
+  }
+}
+
+/**
+ * Build the data payload for a real embedded spell document. Same
+ * shape the old transient code path produced, plus a magicitems-only
+ * flag so the on-load orphan sweep and the render-time spellbook
+ * filter can find it.
+ *
+ * Patches per-spell overrides at both legacy (`system.save`,
+ * `system.actionType`, `system.scaling`) and activities-level
+ * (dnd5e 5.x: `system.activities[*]`) locations. dnd5e 5.x removed
+ * the legacy spell-level `scaling`/`save`/`actionType` fields entirely
+ * — fully-migrated compendium spells silently dropped the user's
+ * flat-DC, custom attack bonus, and cantrip-no-scaling overrides
+ * before this rewrite.
+ *
+ * Legacy patches are kept as a fallback for any pre-5.x content
+ * still floating around in worlds; they'll just be inert when both
+ * schemas would have been present.
+ * @param sourceItem
+ * @param entry
+ * @param magicItem
  */
 function buildSpellData(sourceItem, entry, magicItem) {
   let data = sourceItem.toObject ? sourceItem.toObject() : sourceItem.toJSON();
   delete data._id;
+  data.system ??= {};
 
-  if (data.system?.save && typeof data.system.save.scaling === "undefined") {
+  // ---- Flat DC override (D2) ---------------------------------------------
+  // Activities-level: each save activity's `save.dc` is `{calculation, formula}`.
+  //   - `calculation = ""` switches dnd5e's data prep into "use the formula value"
+  //   - `formula = String(<dc>)` is read deterministically into `dc.value`
+  // Legacy `system.save.*` is patched as a fallback for pre-5.x content.
+  if (entry.flatDc) {
+    for (const a of iterActivities(data.system)) {
+      if (a?.type !== "save" && !a?.save) continue;
+      a.save ??= {};
+      a.save.dc ??= {};
+      a.save.dc.calculation = "";
+      a.save.dc.formula = String(entry.dc ?? "");
+    }
+    if (data.system?.save) {
+      data = foundry.utils.mergeObject(data, {
+        "system.save.scaling": "flat",
+        "system.save.dc": entry.dc,
+      });
+    }
+  } else if (data.system?.save && typeof data.system.save.scaling === "undefined") {
+    // Pre-5.x default: missing scaling → "spell" (spellcasting DC).
     data = foundry.utils.mergeObject(data, { "system.save.scaling": "spell" });
   }
 
-  if (entry.flatDc && data.system?.save) {
-    data = foundry.utils.mergeObject(data, {
-      "system.save.scaling": "flat",
-      "system.save.dc": entry.dc,
-    });
+  // ---- Custom spell-attack bonus (D3) ------------------------------------
+  // Activities-level: each attack activity's `attack.bonus` is a FormulaField.
+  // Append our bonus rather than replace, matching the legacy behaviour.
+  const wantsAttackPatch = entry.atkBonus || entry.checkAtkBonus;
+  if (wantsAttackPatch) {
+    const attackBonus = entry.checkAtkBonus
+      ? String(entry.atkBonus ?? "")
+      : String(magicItem.actor?.system?.attributes?.prof ?? "");
+    if (attackBonus) {
+      for (const a of iterActivities(data.system)) {
+        if (a?.type !== "attack" && !a?.attack) continue;
+        a.attack ??= {};
+        a.attack.bonus = a.attack.bonus ? `${a.attack.bonus} + ${attackBonus}` : attackBonus;
+      }
+      // Legacy fallback for pre-5.x spells with top-level actionType.
+      if (data.system?.actionType === "rsak" || data.system?.actionType === "msak") {
+        data.system.attack ??= {};
+        data.system.attack.bonus = data.system.attack.bonus
+          ? `${data.system.attack.bonus} + ${attackBonus}`
+          : attackBonus;
+      }
+    }
   }
 
-  if (data.system?.actionType === "rsak" || data.system?.actionType === "msak") {
-    let attackBonusValue = String(entry.atkBonus ?? "");
-    if (!entry.checkAtkBonus) {
-      attackBonusValue = String(magicItem.actor?.system?.attributes?.prof ?? "");
+  // ---- Cantrip no-scaling override (D1) ----------------------------------
+  // Activities-level: each damage part's `scaling.mode` controls upcast
+  // scaling. Setting it to "" makes the increase compute to 0, returning
+  // the base formula unchanged — the dnd5e equivalent of legacy
+  // `system.scaling = "none"`. Only applies when both the spell is a
+  // cantrip and the user hasn't opted into the "scale cantrips" world
+  // setting.
+  const isCantrip = Number(data.system?.level ?? 0) === 0;
+  if (isCantrip && !MagicItemHelpers.isLevelScalingSettingOn()) {
+    for (const a of iterActivities(data.system)) {
+      const parts = a?.damage?.parts;
+      if (!Array.isArray(parts)) continue;
+      for (const p of parts) {
+        if (!p) continue;
+        p.scaling ??= {};
+        p.scaling.mode = "";
+      }
     }
-    data.system.attack ??= {};
-    if (data.system.attack.bonus) {
-      data.system.attack.bonus += `+ ${attackBonusValue}`;
-    } else {
-      data.system.attack.bonus = attackBonusValue;
+    // Legacy fallback.
+    if (data.system && typeof data.system.scaling !== "undefined") {
+      data.system.scaling = "none";
     }
   }
 
@@ -69,11 +157,41 @@ function buildSpellData(sourceItem, entry, magicItem) {
 }
 
 /**
+ * Detect whether midi-qol still has an active Workflow for any of the
+ * given activity uuids. Used by the 30-second timeout safety net to
+ * defer cleanup when midi is mid-stride — otherwise a slow workflow
+ * (network jitter, large effect stacks, GM reviewing damage) could see
+ * its underlying item document deleted out from under it.
+ * @param activityUuids
+ */
+function midiHasActiveWorkflow(activityUuids) {
+  try {
+    const Wf = globalThis.MidiQOL?.Workflow ?? globalThis.MidiQOL?.workflowClass;
+    const workflows = Wf?.workflows;
+    if (!workflows) return false;
+    const iter = workflows instanceof Map ? workflows.values() : Object.values(workflows);
+    for (const wf of iter) {
+      const u = wf?.activity?.uuid ?? wf?._activity?.uuid;
+      if (u && activityUuids.has(u)) return true;
+    }
+  } catch (e) {
+    /* Fall through — when in doubt, allow cleanup */
+  }
+  return false;
+}
+
+/**
  * Schedule cleanup of a freshly-created transient embedded spell once
  * its cast workflow finishes. Listens for whichever post-cast hook
  * fires first (midi's `RollComplete` if midi is installed, dnd5e's
  * `postUseActivity` otherwise), and falls back to a 30-second timeout
- * so a cancelled or stalled workflow can't leak orphan items.
+ * so a cancelled or stalled workflow can't leak orphan items. If the
+ * timeout fires while midi still has an active Workflow for one of
+ * our activity UUIDs, defer another 30s — repeat up to 3 times before
+ * giving up and forcing cleanup (the `ready`-time orphan sweep will
+ * pick up anything we miss).
+ * @param actor
+ * @param transient
  */
 function scheduleTransientCleanup(actor, transient) {
   const actorId = actor?.id;
@@ -86,18 +204,32 @@ function scheduleTransientCleanup(actor, transient) {
     const list = acts ? Array.from(acts.values?.() ?? Object.values(acts)) : [];
     for (const a of list) if (a?.uuid) activityUuids.add(a.uuid);
   } catch (e) {
-    /* fall through */
+    /* Fall through */
   }
 
   let timeoutHandle;
   let dnd5eHookId;
   let midiHookId;
+  let timeoutAttempts = 0;
 
   const finalise = async () => {
     if (timeoutHandle) clearTimeout(timeoutHandle);
     if (dnd5eHookId) Hooks.off("dnd5e.postUseActivity", dnd5eHookId);
     if (midiHookId) Hooks.off("midi-qol.RollComplete", midiHookId);
     await safeDeleteTransient(game.actors.get(actorId), itemId);
+  };
+
+  const onTimeout = () => {
+    // If midi still has an active Workflow for one of our activities,
+    // defer cleanup another 30s rather than yanking the item from
+    // under a running workflow. Cap retries so a stuck workflow can't
+    // hold the transient forever — `ready`-sweep is the backstop.
+    timeoutAttempts += 1;
+    if (timeoutAttempts < 3 && midiHasActiveWorkflow(activityUuids)) {
+      timeoutHandle = setTimeout(onTimeout, 30000);
+      return;
+    }
+    finalise();
   };
 
   dnd5eHookId = Hooks.on("dnd5e.postUseActivity", (activity) => {
@@ -111,7 +243,7 @@ function scheduleTransientCleanup(actor, transient) {
     finalise();
   });
 
-  timeoutHandle = setTimeout(finalise, 30000);
+  timeoutHandle = setTimeout(onTimeout, 30000);
 }
 
 export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
@@ -131,6 +263,7 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
 
     if (this.item.canUpcast()) {
       const spellFormData = await MagicItemUpcastDialog.create(this.magicItem, this.item);
+      if (!spellFormData) return; // User dismissed the upcast dialog
       upcastLevel = parseInt(spellFormData.get("level"));
       consumption = parseInt(spellFormData.get("consumption"));
     }
@@ -187,16 +320,17 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
             },
           });
         } else {
-          Logger.info(`The summoning dialog has been dismissed, not using the item.`);
+          Logger.info("The summoning dialog has been dismissed, not using the item.");
           await safeDeleteTransient(actor, transient.id);
           return;
         }
       }
 
-      if (spell.system.level === 0 && !MagicItemHelpers.isLevelScalingSettingOn()) {
-        await spell.update({ "system.scaling": "none" });
-      }
-
+      // Cantrip "no scaling" is now applied at build time via
+      // `buildSpellData()` (zeroes each damage activity's
+      // `damage.parts[*].scaling.mode`). The legacy post-create
+      // `update({"system.scaling": "none"})` was a no-op on dnd5e 5.x
+      // spells (top-level `system.scaling` was removed).
       if (upcastLevel !== spell.system.level) {
         foundry.utils.mergeObject(itemUseConfiguration, {
           scaling: Math.max(upcastLevel - spell.system.level, 0),
@@ -248,11 +382,23 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
  * Implemented as a top-level hook (module-side concern, lives here for
  * proximity to the materialise code that creates them).
  */
+// dnd5e 5.x ships two sheet generations: the legacy v1 sheets
+// (`ActorSheet5eCharacter`/`NPC` + their 4.x-era `*2` variants) and the
+// v2 ApplicationV2 sheets (`CharacterActorSheet`/`NPCActorSheet`). Subscribe
+// to all four hook names so the transient-spell filter runs whichever
+// sheet the user has active. Harmless extras when only one matches.
 Hooks.on("renderActorSheet5eCharacter2", filterTransientsFromSheet);
 Hooks.on("renderActorSheet5eNPC2", filterTransientsFromSheet);
 Hooks.on("renderActorSheet5eCharacter", filterTransientsFromSheet);
 Hooks.on("renderActorSheet5eNPC", filterTransientsFromSheet);
+Hooks.on("renderCharacterActorSheet", filterTransientsFromSheet);
+Hooks.on("renderNPCActorSheet", filterTransientsFromSheet);
 
+/**
+ *
+ * @param app
+ * @param htmlOrElement
+ */
 function filterTransientsFromSheet(app, htmlOrElement) {
   const actor = app?.actor;
   if (!actor) return;
@@ -281,7 +427,7 @@ Hooks.once("ready", async () => {
       const meta = i.flags?.[CONSTANTS.MODULE_ID]?.[TRANSIENT_FLAG];
       if (!meta) return false;
       const age = now - (meta.createdAt ?? 0);
-      return age > 60_000; // older than a minute → certainly orphaned
+      return age > 60_000; // Older than a minute → certainly orphaned
     });
     if (!stale.length) continue;
     try {

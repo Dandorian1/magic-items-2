@@ -68,21 +68,26 @@ const API = {
       return false;
     }
     let attunement = itemD.system.attunement;
-    let target = game.user.targets.first(); // await canvas.tokens.get(args[0].hitTargets[0]._id);
+    let target = game.user.targets.first(); // Await canvas.tokens.get(args[0].hitTargets[0]._id);
     if (target && attunement === 2) {
-      new Dialog({
-        title: `${itemD.name}`,
-        content: `<p>Spend a charge?</p>`,
-        buttons: {
-          confirmed: {
-            icon: "<i class='fas fa-bolt'></i>",
+      // DialogV2 — v1 `Dialog` is deprecated since v12 and removed at v15.
+      const action = await foundry.applications.api.DialogV2.wait({
+        window: { title: `${itemD.name}` },
+        content: "<p>Spend a charge?</p>",
+        buttons: [
+          {
+            action: "confirmed",
+            icon: "fas fa-bolt",
             label: "Yes",
-            callback: async () => {
-              await this.roll(itemD.name, spells[0].name);
-            },
+            callback: () => "confirmed",
           },
-        },
-      }).render(true);
+        ],
+        default: "confirmed",
+        rejectClose: false,
+      });
+      if (action === "confirmed") {
+        await this.roll(itemD.name, spells[0].name);
+      }
     }
   },
 
@@ -136,23 +141,28 @@ const API = {
             <p>Pick a spell to cast</p>
             <div class="form-group">
                 <label for="weapons">Listed Spells</label>
-                <select id="spells">${spellList}</select>
+                <select id="spells" name="spells">${spellList}</select>
             </div>
         </form>`;
 
-    new Dialog({
-      title: `${itemD.name}`,
+    // DialogV2 — v1 `Dialog` is deprecated since v12 and removed at v15.
+    const chosen = await foundry.applications.api.DialogV2.wait({
+      window: { title: `${itemD.name}` },
       content: htmlContent,
-      buttons: {
-        cast: {
+      buttons: [
+        {
+          action: "cast",
           label: "Cast",
-          callback: async (html) => {
-            let get_spell = await html.find("#spells")[0].value;
-            await this.roll(itemD.name, get_spell);
-          },
+          icon: "fas fa-wand-magic-sparkles",
+          callback: (event, button, dialog) => button.form.elements.spells?.value,
         },
-      },
-    }).render(true);
+      ],
+      default: "cast",
+      rejectClose: false,
+    });
+    if (chosen) {
+      await this.roll(itemD.name, chosen);
+    }
   },
 
   /**
@@ -183,23 +193,28 @@ const API = {
             <p>Pick a spell to cast</p>
             <div class="form-group">
                 <label for="weapons">Listed Spells</label>
-                <select id="spells">${spellList}</select>
+                <select id="spells" name="spells">${spellList}</select>
             </div>
         </form>`;
 
-      new Dialog({
-        title: `${itemD.name}`,
+      // DialogV2 — v1 `Dialog` is deprecated since v12 and removed at v15.
+      const chosen = await foundry.applications.api.DialogV2.wait({
+        window: { title: `${itemD.name}` },
         content: htmlContent,
-        buttons: {
-          cast: {
+        buttons: [
+          {
+            action: "cast",
             label: "Cast",
-            callback: async (html) => {
-              let get_spell = await html.find("#spells")[0].value;
-              await this.roll(itemD.name, get_spell);
-            },
+            icon: "fas fa-wand-magic-sparkles",
+            callback: (event, button, dialog) => button.form.elements.spells?.value,
           },
-        },
-      }).render(true);
+        ],
+        default: "cast",
+        rejectClose: false,
+      });
+      if (chosen) {
+        await this.roll(itemD.name, chosen);
+      }
     } else {
       await dnd5e.documents.macro.rollItem(itemD.name);
     }
@@ -208,7 +223,7 @@ const API = {
   /**
    * Method handling a short-rest action for magic items for an actor.
    * @param {string/Actor/UUID} actor The actor to use for retrieve the Actor
-   * @param {Boolean} isNewDay Check whether it's a new day
+   * @param {boolean} isNewDay Check whether it's a new day
    * @returns {Promise<void>} No response
    */
   async execActorShortRest(actor, isNewDay) {
@@ -222,7 +237,7 @@ const API = {
   /**
    * Method handling a long-rest action for magic items for an actor.
    * @param {string/Actor/UUID} actor The actor to use for retrieve the Actor
-   * @param {Boolean} isNewDay Check whether it's a new day
+   * @param {boolean} isNewDay Check whether it's a new day
    * @returns {Promise<void>} No response
    */
   async execActorLongRest(actor, isNewDay) {

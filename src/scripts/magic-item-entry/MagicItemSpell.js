@@ -11,14 +11,8 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
     this.upcast = this.upcast ? NumberUtils.parseIntOrGetDefault(this.upcast, 0) : this.level;
     this.upcastCost = this.upcastCost ? NumberUtils.parseIntOrGetDefault(this.upcastCost, 0) : 1;
     this.dc = this.flatDc && this.dc ? this.dc : "";
-    this.componentsVSM = this.componentsVSM;
-    this.componentsALL = this.componentsALL;
     this.atkBonus = this.checkAtkBonus && this.atkBonus ? this.atkBonus : "";
-    // Populated by prepareDisplay() before sheet render. Defaults keep
-    // the template render correct if prepareDisplay was never called.
-    // Structured to mirror the native dnd5e spell-row cells:
-    //   ROLL    .item-roll      → <span class="ability">…</span> + <span class="value">…</span>
-    //   FORMULA .item-formula   → repeated {formula, damageType, iconPath}
+    // Populated by prepareDisplay() before sheet render.
     this.saveAbility = "";
     this.saveDc = "";
     this.attackLabel = "";
@@ -33,6 +27,7 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
    * Reads dnd5e 5.x activity-system data (`system.activities`). Falls back
    * to the legacy `system.save` / `system.damage.parts` shape for older
    * spells that haven't been migrated.
+   * @param actor
    */
   async prepareDisplay(actor) {
     this.saveAbility = "";
@@ -63,7 +58,7 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
       });
     };
 
-    // dnd5e 5.x activities — Collection or plain object.
+    // Dnd5e 5.x activities — Collection or plain object.
     const actsRaw = spell.system?.activities;
     let acts = [];
     if (actsRaw) {
@@ -182,8 +177,8 @@ export class MagicItemSpell extends AbstractMagicItemEntry {
 
   canUpcastLabel() {
     return this.canUpcast()
-      ? game.i18n.localize(`MAGICITEMS.SheetCanUpcastYes`)
-      : game.i18n.localize(`MAGICITEMS.SheetCanUpcastNo`);
+      ? game.i18n.localize("MAGICITEMS.SheetCanUpcastYes")
+      : game.i18n.localize("MAGICITEMS.SheetCanUpcastNo");
   }
 
   consumptionAt(level) {

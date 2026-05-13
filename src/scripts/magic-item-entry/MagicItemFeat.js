@@ -8,13 +8,12 @@ export class MagicItemFeat extends AbstractMagicItemEntry {
   constructor(data) {
     super(data);
     this.effect = this.effect ? this.effect : "e1";
-    this.featAction = this.featAction;
   }
 
   consumptionLabel() {
     return this.effect === "e1"
       ? `${game.i18n.localize("MAGICITEMS.SheetConsumptionConsume")}: ${this.consumption}`
-      : game.i18n.localize(`MAGICITEMS.SheetConsumptionDestroy`);
+      : game.i18n.localize("MAGICITEMS.SheetConsumptionDestroy");
   }
 
   serializeData() {

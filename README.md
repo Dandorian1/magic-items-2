@@ -120,6 +120,19 @@ All informations about the api and the sheet integration can be found here [API]
 |DND5e 3.0 Sheet|✔️|released in 1.6.0|
 |[Compact DnDBeyond-like 5e Character Sheet](https://github.com/eastcw/foundryvtt-compactBeyond5eSheet)|:interrobang:|Works, but doesn't show in Actions tab.|
 |[Tidy 5e Sheet Rewrite](https://github.com/kgar/foundry-vtt-tidy-5e-sheets/)|✔️||
+|[Enhanced Combat HUD - DnD5e (Argon)](https://github.com/cswendrowski/FoundryVTT-Enhanced-Combat-HUD)|✔️|Magic-item spells appear in the Cast Spell accordion, grouped under the parent magic item, with the item's charge dots in the section header. Requires libWrapper (recommended). See [Argon HUD integration](#argon-hud-integration) below.|
+|[midi-qol](https://gitlab.com/tposney/midi-qol) + [chris-premades](https://github.com/chrisk123999/chris-premades)|✔️|Spells cast through magic items materialize as real actor-embedded items for the duration of the cast workflow, so midi-qol & chris-premades hooks see them in `actor.items` and the workflow completes end-to-end (damage and healing apply correctly).|
+
+### Argon HUD integration
+
+When [`enhancedcombathud-dnd5e`](https://github.com/cswendrowski/FoundryVTT-Enhanced-Combat-HUD) is active, magic-item spells are surfaced in the Argon Cast Spell accordion, grouped under the parent magic item (Staff of Healing, Wand of Magic Missiles, etc.) — the same shape Argon already uses for native dnd5e "Cast Activity" magic items. The integration:
+
+- Pulls per-spell save DC / formula / school / range / target / description into Argon's hover tooltip.
+- Shows the item's remaining charges as X/▢ dots in the accordion section header.
+- Refreshes charge dots immediately on cast (no need to close & re-open the HUD).
+- Routes clicks through `MagicItemActor.rollByName(...)` so per-spell consumption, upcast prompts, summoning dialogs, and active-effect prompts all behave the same as casting via the character sheet.
+
+The integration is non-invasive: it uses Argon's own per-component render hooks plus libWrapper to layer onto Argon's existing prepare/click paths. No edits to Argon's source files. libWrapper is recommended but not required (a direct-patch fallback runs if it's missing).
 
 # Build
 

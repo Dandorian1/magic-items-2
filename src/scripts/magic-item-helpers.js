@@ -29,7 +29,7 @@ export class MagicItemHelpers {
   }
 
   static numeric = function (value, fallback) {
-    // if ($.isNumeric(value)) {
+    // If ($.isNumeric(value)) {
     //   return parseInt(value);
     // } else {
     //   return fallback;
@@ -38,11 +38,11 @@ export class MagicItemHelpers {
     if (isRealNumber(value)) {
       return value;
     }
-    // if is a string but with a numeric value
+    // If is a string but with a numeric value
     else if (!isNaN(parseFloat(value)) && isFinite(value)) {
       return parseInt(value);
     }
-    // if is something else
+    // If is something else
     else {
       return fallback;
     }
@@ -93,7 +93,7 @@ export class MagicItemHelpers {
 
   static async fetchEntity(entity) {
     if (entity.pack === "world") {
-      const result = await CONFIG["Item"].collection?.instance?.get(entity.id);
+      const result = await CONFIG.Item.collection?.instance?.get(entity.id);
       return result;
     } else {
       const pack = game.packs.find((p) => p.collection === entity.pack);
@@ -192,16 +192,19 @@ export class MagicItemHelpers {
       options.profile = Object.keys(options.profiles)[0];
       options.profiles = null;
     }
-    if (summons.creatureSizes.size > 1)
-      options.creatureSizes = summons.creatureSizes.reduce((obj, k) => {
+    // Sets have no .reduce in dnd5e 5.x; wrap in Array.from().
+    if (summons.creatureSizes.size > 1) {
+      options.creatureSizes = Array.from(summons.creatureSizes).reduce((obj, k) => {
         obj[k] = CONFIG.DND5E.actorSizes[k]?.label;
         return obj;
       }, {});
-    if (summons.creatureTypes.size > 1)
-      options.creatureTypes = summons.creatureTypes.reduce((obj, k) => {
+    }
+    if (summons.creatureTypes.size > 1) {
+      options.creatureTypes = Array.from(summons.creatureTypes).reduce((obj, k) => {
         obj[k] = CONFIG.DND5E.creatureTypes[k]?.label;
         return obj;
       }, {});
+    }
     return options;
   }
 }

@@ -128,8 +128,8 @@ export class MagicItem {
 
   serializeEntries(entries, trash) {
     let data = {};
-    entries.forEach((entry, idx) => (data["" + idx] = entry.serializeData()));
-    trash.forEach((index) => (data["-=" + index] = null));
+    entries.forEach((entry, idx) => (data[`${idx}`] = entry.serializeData()));
+    trash.forEach((index) => (data[`-=${index}`] = null));
     return data;
   }
 

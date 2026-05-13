@@ -1,46 +1,51 @@
 import CONSTANTS from "./constants/constants.js";
-
-const renderTemplateV2 = foundry.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
+import { renderTemplate as renderTemplateV2 } from "./lib/foundry-compat.js";
 
 /**
- * A specialized Dialog subclass for casting a spell item at a certain level
- * @type {Dialog}
+ * Spell upcast / consumption configuration dialog.
+ *
+ * Implemented on top of `foundry.applications.api.DialogV2` (the v1
+ * `Dialog` global is deprecated since v12, removed at v15). DialogV2
+ * doesn't have v1's `activateListeners(html)` hook, so the
+ * "consumption updates when level changes" wiring is done via the
+ * `render` Hook DialogV2 fires after attaching content. Returns the
+ * FormData of `#spell-config-form` on the Cast button.
+ *
+ * Resolves to a `FormData` instance on cast, or `null` if the dialog
+ * was dismissed (cancelled / closed).
  */
-export class MagicItemUpcastDialog extends Dialog {
-  constructor(item, dialogData = {}, options = {}) {
-    super(dialogData, options);
-    this.options.classes = ["dnd5e", "dialog"];
-    this.item = item;
-  }
-
-  activateListeners(html) {
-    super.activateListeners(html);
-    html.find(`select[name="level"]`).change((evt) => {
-      let level = parseInt(evt.target.value);
-      let consumption = this.item.consumptionAt(level);
-      html.find(`input[name="consumption"]`).val(consumption);
-    });
-  }
-
+export class MagicItemUpcastDialog {
   static async create(magicItem, item) {
     const html = await renderTemplateV2(`modules/${CONSTANTS.MODULE_ID}/templates/magic-item-upcast-dialog.html`, item);
 
-    // Create the Dialog and return as a Promise
-    return new Promise((resolve, reject) => {
-      const dlg = new this(item, {
-        title: `${magicItem.name} > ${item.name}: Spell Configuration`,
-        content: html,
-        buttons: {
-          cast: {
-            icon: '<i class="fas fa-magic"></i>',
-            label: "Cast",
-            callback: (html) => resolve(new FormData(html[0].querySelector("#spell-config-form"))),
+    return foundry.applications.api.DialogV2.wait({
+      window: { title: `${magicItem.name} > ${item.name}: Spell Configuration` },
+      classes: ["dnd5e", "dialog"],
+      content: html,
+      buttons: [
+        {
+          action: "cast",
+          icon: "fas fa-magic",
+          label: "Cast",
+          callback: (event, button, dialog) => {
+            const form = button.form.querySelector("#spell-config-form") ?? button.form;
+            return new FormData(form);
           },
         },
-        default: "cast",
-        close: reject,
-      });
-      dlg.render(true);
+      ],
+      default: "cast",
+      rejectClose: false,
+      render: (event, dialog) => {
+        const root = dialog.element;
+        const levelSel = root.querySelector('select[name="level"]');
+        const consumption = root.querySelector('input[name="consumption"]');
+        if (levelSel && consumption) {
+          levelSel.addEventListener("change", (evt) => {
+            const level = parseInt(evt.target.value);
+            if (Number.isFinite(level)) consumption.value = item.consumptionAt(level);
+          });
+        }
+      },
     });
   }
 }

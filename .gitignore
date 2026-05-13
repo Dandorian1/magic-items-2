@@ -134,6 +134,11 @@ foundry.js
 /package
 /.vite-cache
 /package-lock.json
-/package-lock.json
 /wiki/backups/FoundryVTT-ItemPiles_2024-03-03
 argon-dnd5e-index.js.map
+
+# Compiled compendium pack databases — rebuild via `npm run build:db`.
+# Canonical source lives under `src/packs/_source/<pack-name>/*.json`.
+/src/packs/magicitems/
+/src/packs/magicitem-feats/
+/src/packs/magicitem-tables/

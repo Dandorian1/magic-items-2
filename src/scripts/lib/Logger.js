@@ -10,7 +10,7 @@ export default class Logger {
       game.modules.get("_dev-mode")?.api?.getPackageDebugValue(CONSTANTS.MODULE_ID, "boolean")
     );
   }
-  // export let debugEnabled = 0;
+  // Export let debugEnabled = 0;
   // 0 = none, warnings = 1, debug = 2, all = 3
 
   static debug(msg, ...args) {
@@ -107,7 +107,7 @@ export default class Logger {
     return game.i18n.format(key, data)?.trim();
   };
 
-  // setDebugLevel = (debugText): void => {
+  // SetDebugLevel = (debugText): void => {
   //   debugEnabled = { none: 0, warn: 1, debug: 2, all: 3 }[debugText] || 0;
   //   // 0 = none, warnings = 1, debug = 2, all = 3
   //   if (debugEnabled >= 3) CONFIG.debug.hooks = true;
