@@ -8,6 +8,66 @@ import { MagicItem } from "./scripts/magic-item/MagicItem.js";
 
 // CONFIG.debug.hooks = true;
 
+function canUseActor(actor, permission = "LIMITED") {
+  return actor?.testUserPermission?.(game.user, permission) ?? actor?.isOwner ?? false;
+}
+
+function normalizeHtml(html) {
+  return html?.jquery ? html : $(html);
+}
+
+async function showWelcomeDialog() {
+  const message =
+    "Hello everyone!<br><br>This is the first version of Magic Items module that has been transferred from Magic Items 2, therefore it requires a migration of items.<br><br>For manual information about migrations, please consult the latest release changelog.<br><br>Thank you for your continuing support, and I hope you will enjoy this module!<br><br>If you want, please go ahead and check out the discord community created for this module on Foundry Module listing or Github project.";
+
+  await foundry.applications.api.DialogV2.wait({
+    window: { title: "Magic Items" },
+    content: `${message}<br><br>`,
+    buttons: [
+      {
+        action: "use",
+        icon: "fas fa-check",
+        label: "Do the automatic migration.",
+        callback: async () => {
+          await MIGRATION.migrateScopeMagicItem();
+          await game.settings.set(CONSTANTS.MODULE_ID, "welcomeMessage", true);
+        },
+      },
+      {
+        action: "closeAndChangeSetting",
+        icon: "fas fa-times",
+        label: "I will do the migration on my own - do not show this window again.",
+        callback: async () => {
+          await game.settings.set(CONSTANTS.MODULE_ID, "welcomeMessage", true);
+        },
+      },
+      {
+        action: "close",
+        icon: "fas fa-times",
+        label: game.i18n.localize("MAGICITEMS.SheetDialogClose"),
+      },
+    ],
+    default: "use",
+    modal: true,
+    rejectClose: false,
+  });
+}
+
+function bindActorSheet(app, html, data) {
+  const actor = app.actor ?? app.document ?? data?.actor;
+  if (!actor || tidyApi?.isTidy5eCharacterSheet?.(app) || tidyApi?.isTidy5eNpcSheet?.(app)) {
+    return;
+  }
+  MagicItemSheet.bind(app, normalizeHtml(html), data);
+}
+
+function bindItemSheet(app, html, data) {
+  if (tidyApi?.isTidy5eItemSheet?.(app) || !MagicItemTab.isAllowedToShow()) {
+    return;
+  }
+  MagicItemTab.bind(app, normalizeHtml(html), data);
+}
+
 Handlebars.registerHelper("enabled", function (value, options) {
   return Boolean(value) ? "" : "disabled";
 });
@@ -116,59 +176,64 @@ Hooks.once("setup", async () => {
 
 Hooks.once("ready", async () => {
   Array.from(game.actors)
-    .filter((actor) => actor.permission >= 1)
+    .filter((actor) => canUseActor(actor, "LIMITED"))
     .forEach((actor) => {
       MagicItemActor.bind(actor);
     });
 
   if (game.user.isGM && !game.settings.get(CONSTANTS.MODULE_ID, "welcomeMessage")) {
-    const message =
-      "Hello everyone!<br><br>This is the first version of Magic Items module that has been transferred from Magic Items 2, therefore it requires a migration of items.<br><br>For manual information about migrations, please consult the latest release changelog.<br><br>Thank you for your continuing support, and I hope you will enjoy this module!<br><br>If you want, please go ahead and check out the discord community created for this module on Foundry Module listing or Github project.";
-    const title = "Magic Items";
-    // eslint-disable-next-line no-undef
-    let d = new Dialog({
-      title: title,
-      content: `${message}<br><br>`,
-      buttons: {
-        use: {
-          icon: '<i class="fas fa-check"></i>',
-          label: "Do the automatic migration.",
-          callback: () => {
-            MIGRATION.migrateScopeMagicItem();
-            game.settings.set(CONSTANTS.MODULE_ID, "welcomeMessage", true);
-          },
-        },
-        closeAndChangeSetting: {
-          icon: '<i class="fas fa-times"></i>',
-          label: "I will do the migration on my own - do not show this window again.",
-          callback: () => {
-            game.settings.set(CONSTANTS.MODULE_ID, "welcomeMessage", true);
-            d.close();
-          },
-        },
-        close: {
-          icon: '<i class="fas fa-times"></i>',
-          label: game.i18n.localize("MAGICITEMS.SheetDialogClose"),
-          callback: () => d.close(),
-        },
-      },
-      default: "use",
-    });
-    d.render(true);
+    await showWelcomeDialog();
   }
 });
 
-Hooks.once("createActor", (actor) => {
-  if (actor.permission >= 2) {
+Hooks.on("createActor", (actor) => {
+  if (canUseActor(actor, "OWNER")) {
     MagicItemActor.bind(actor);
   }
 });
 
-Hooks.once("createToken", (token) => {
+Hooks.on("createToken", (token) => {
   const actor = token.actor;
-  if (actor.permission >= 2) {
+  if (canUseActor(actor, "OWNER")) {
     MagicItemActor.bind(actor);
   }
+});
+
+Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
+  const magicItemActor = MagicItemActor.get(actor.id);
+  if (!magicItemActor) {
+    return;
+  }
+  await magicItemActor.buildItems();
+  if (result.longRest || config.type === "long") {
+    await magicItemActor.onLongRest(result);
+  } else {
+    await magicItemActor.onShortRest(result);
+  }
+});
+
+Hooks.on("dnd5e.postUseActivity", async (activity) => {
+  const item = activity?.item;
+  const magicItem = item?.actor ? MagicItemActor.get(item.actor.id)?.magicItem(item.id) : null;
+  if (magicItem) {
+    await magicItem.triggerTables();
+  }
+});
+
+Hooks.on("dnd5e.dropItemSheetData", (item, sheet, data) => {
+  if (
+    !MagicItemTab.isAllowedToShow() ||
+    !MagicItemTab.isAcceptedItemType(item) ||
+    !MagicItemTab.isMagicItemTabActive(sheet) ||
+    !["Item", "RollTable"].includes(data?.type)
+  ) {
+    return;
+  }
+
+  const flagsData = foundry.utils.getProperty(item, `flags.${CONSTANTS.MODULE_ID}`);
+  const magicItem = new MagicItem(flagsData);
+  MagicItemTab.onDropData({ data, item, magicItem });
+  return false;
 });
 
 let tidyApi;
@@ -198,8 +263,9 @@ Hooks.once("tidy5e-sheet.ready", (api) => {
           item: params.data.item,
           magicItem: magicItem,
         });
-        params.element.querySelector(`.magicitems-content`).addEventListener("drop", (event) => {
-          MagicItemTab.onDrop({ event, item: params.data.item, magicItem: magicItem });
+        MagicItemTab.activateDropTarget(params.element.querySelector(`.magicitems-content`), {
+          item: params.data.item,
+          magicItem: magicItem,
         });
       } else {
         MagicItemTab.disableMagicItemTabInputs(html);
@@ -285,29 +351,23 @@ Hooks.on("tidy5e-sheet.renderActorSheet", (app, element, data) => {
 });
 
 Hooks.on(`renderItemSheet5e`, (app, html, data) => {
-  if (tidyApi?.isTidy5eItemSheet(app)) {
-    return;
-  }
-
-  if (!MagicItemTab.isAllowedToShow()) {
-    return;
-  }
-
-  MagicItemTab.bind(app, html, data);
+  bindItemSheet(app, html, data);
 });
 
 Hooks.on(`renderActorSheet5eCharacter`, (app, html, data) => {
-  if (tidyApi?.isTidy5eCharacterSheet(app)) {
-    return;
-  }
-  MagicItemSheet.bind(app, html, data);
+  bindActorSheet(app, html, data);
 });
 
 Hooks.on(`renderActorSheet5eNPC`, (app, html, data) => {
-  if (tidyApi?.isTidy5eNpcSheet(app)) {
-    return;
-  }
-  MagicItemSheet.bind(app, html, data);
+  bindActorSheet(app, html, data);
+});
+
+Hooks.on(`renderCharacterActorSheet`, (app, html, data) => {
+  bindActorSheet(app, html, data);
+});
+
+Hooks.on(`renderNPCActorSheet`, (app, html, data) => {
+  bindActorSheet(app, html, data);
 });
 
 Hooks.on("hotbarDrop", async (bar, data, slot) => {

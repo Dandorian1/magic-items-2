@@ -1,7 +1,7 @@
-import CONSTANTS from "../constants/constants";
-import Logger from "../lib/Logger";
-import { RetrieveHelpers } from "../lib/retrieve-helpers";
-import { MagicItemHelpers } from "../magic-item-helpers";
+import CONSTANTS from "../constants/constants.js";
+import Logger from "../lib/Logger.js";
+import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
+import { MagicItemHelpers } from "../magic-item-helpers.js";
 
 export class AbstractMagicItemEntry {
   constructor(data) {

@@ -1,6 +1,6 @@
-import { AbstractMagicItemEntry } from "./AbstractMagicItemEntry";
-import { NumberUtils } from "../utils/number";
-import Logger from "../lib/Logger";
+import { AbstractMagicItemEntry } from "./AbstractMagicItemEntry.js";
+import { NumberUtils } from "../utils/number.js";
+import Logger from "../lib/Logger.js";
 
 export class MagicItemSpell extends AbstractMagicItemEntry {
   constructor(data) {

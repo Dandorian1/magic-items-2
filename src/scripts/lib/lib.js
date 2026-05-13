@@ -137,7 +137,7 @@ export function getOwnedCharacters(user = false) {
 
 export function getUserCharacter(user = false) {
   user = user || game.user;
-  return user.character || (user.isGM ? false : getOwnedCharacters(user)?.[0] ?? false);
+  return user.character || (user.isGM ? false : (getOwnedCharacters(user)?.[0] ?? false));
 }
 
 export function isValidImage(pathToImage) {

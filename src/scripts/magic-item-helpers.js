@@ -1,10 +1,17 @@
-import CONSTANTS from "./constants/constants";
-import Logger from "./lib/Logger";
+import CONSTANTS from "./constants/constants.js";
+import Logger from "./lib/Logger.js";
 import { isRealNumber, isEmptyObject } from "./lib/lib.js";
 
 export class MagicItemHelpers {
   static isUsingNew5eSheet(sheet) {
-    return sheet?.constructor?.name === "ActorSheet5eCharacter2" || sheet?.constructor?.name === "ActorSheet5eNPC2";
+    const sheetClass = sheet?.constructor?.name;
+    const knownNewSheets = ["ActorSheet5eCharacter2", "ActorSheet5eNPC2", "CharacterActorSheet", "NPCActorSheet"];
+    const actorSheetV2 = foundry?.applications?.sheets?.ActorSheetV2;
+    return knownNewSheets.includes(sheetClass) || (actorSheetV2 && sheet instanceof actorSheetV2);
+  }
+
+  static normalizeHtml(html) {
+    return html?.jquery ? html : $(html);
   }
 
   static isMidiItemEffectWorkflowOn() {

@@ -1,8 +1,8 @@
-import { MAGICITEMS } from "../config";
-import Logger from "../lib/Logger";
-import { RetrieveHelpers } from "../lib/retrieve-helpers";
-import { MagicItemHelpers } from "../magic-item-helpers";
-import { AbstractMagicItemEntry } from "./AbstractMagicItemEntry";
+import { MAGICITEMS } from "../config.js";
+import Logger from "../lib/Logger.js";
+import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
+import { MagicItemHelpers } from "../magic-item-helpers.js";
+import { AbstractMagicItemEntry } from "./AbstractMagicItemEntry.js";
 
 export class MagicItemFeat extends AbstractMagicItemEntry {
   constructor(data) {

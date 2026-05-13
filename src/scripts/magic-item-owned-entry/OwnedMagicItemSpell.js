@@ -1,8 +1,8 @@
-import Logger from "../lib/Logger";
-import { MagicItemUpcastDialog } from "../magicitemupcastdialog";
-import { AbstractOwnedMagicItemEntry } from "./AbstractOwnedMagicItemEntry";
-import { MagicItemHelpers } from "../magic-item-helpers";
-import { RetrieveHelpers } from "../lib/retrieve-helpers";
+import Logger from "../lib/Logger.js";
+import { MagicItemUpcastDialog } from "../magicitemupcastdialog.js";
+import { AbstractOwnedMagicItemEntry } from "./AbstractOwnedMagicItemEntry.js";
+import { MagicItemHelpers } from "../magic-item-helpers.js";
+import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
 
 export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
   async roll() {
@@ -10,15 +10,16 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
     let consumption = this.item.consumption;
 
     if (!this.ownedItem) {
-      let data = await this.item.data();
+      const sourceItem = await this.item.entity();
+      let data = sourceItem.toObject ? sourceItem.toObject() : sourceItem.toJSON();
 
-      if (typeof data.system.save.scaling === "undefined") {
+      if (data.system.save && typeof data.system.save.scaling === "undefined") {
         data = foundry.utils.mergeObject(data, {
           "system.save.scaling": "spell",
         });
       }
 
-      if (this.item.flatDc) {
+      if (this.item.flatDc && data.system.save) {
         data = foundry.utils.mergeObject(data, {
           "system.save.scaling": "flat",
           "system.save.dc": this.item.dc,
@@ -30,6 +31,7 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
         if (!this.item.checkAtkBonus) {
           attackBonusValue = this.magicItem.actor?.system?.attributes?.prof?.toString();
         }
+        data.system.attack ??= {};
         if (data.system.attack.bonus) {
           data.system.attack.bonus += `+ ${attackBonusValue}`;
         } else {
@@ -61,7 +63,9 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
     let proceed = async () => {
       let spell = this.ownedItem;
       let clonedOwnedItem = this.ownedItem;
-      let itemUseConfiguration = {};
+      let itemUseConfiguration = {
+        consume: false,
+      };
 
       if (
         MagicItemHelpers.canSummon() &&
@@ -92,7 +96,7 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
 
       if (upcastLevel !== spell.system.level) {
         foundry.utils.mergeObject(itemUseConfiguration, {
-          slotLevel: upcastLevel,
+          scaling: Math.max(upcastLevel - spell.system.level, 0),
         });
       }
 
@@ -101,13 +105,22 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
         spell.prepareFinalAttributes();
       }
 
-      let chatData = await spell.use(itemUseConfiguration, {
-        configureDialog: false,
-        createMessage: true,
-        flags: {
-          "dnd5e.itemData": clonedOwnedItem,
+      let chatData = await spell.use(
+        itemUseConfiguration,
+        {
+          configure: false,
         },
-      });
+        {
+          create: true,
+          data: {
+            flags: {
+              dnd5e: {
+                itemData: clonedOwnedItem.toObject ? clonedOwnedItem.toObject() : clonedOwnedItem.toJSON(),
+              },
+            },
+          },
+        },
+      );
       if (chatData) {
         await this.consume(consumption);
         if (!this.magicItem.isDestroyed) {

@@ -158,7 +158,7 @@ const API = {
   /**
    * If there are multiple spells on said item, you can use this macro. Just enter the name of the item.
    * @param {Item|string|UUID} item
-   * @param {boolean} runAsItemMacro Run as a item macro with the command `game.dnd5e.rollItemMacro(itemName)`
+   * @param {boolean} runAsItemMacro Run as an item macro with the command `dnd5e.documents.macro.rollItem(itemName)`
    * @returns {Promise<void>} No Response
    */
   async magicItemMultipleSpellsWeapon(item, runAsItemMacro) {
@@ -201,7 +201,7 @@ const API = {
         },
       }).render(true);
     } else {
-      game.dnd5e.rollItemMacro(itemName);
+      await dnd5e.documents.macro.rollItem(itemD.name);
     }
   },
 
