@@ -1,3 +1,7 @@
+### 4.2.13
+#### Bugfixes
+* Actually fix the Argon stale-charge-dots issue. The 4.2.12 attempt used `MagicItemActor.get(actorId)` inside the closure — in the built bundle that lookup returned `undefined` (the module-scope `MagicItemActor` reference doesn't see the populated `MAGICITEMS.actors` singleton from this scope, so `.get()` misses), and the closure silently fell back to the captured `ownedMI`, freezing the dots at the build-time value. Switched to capturing the `MagicItemActor` *instance* directly (`ownedMI.magicItemActor`) and reading `.items` off it each call — that reference is stable across rebuilds and resolves the live `OwnedMagicItem` correctly. Verified live: setFlag → flag changes → Argon's X/▢ dots reflect the new value within the next render tick.
+
 ### 4.2.12
 #### Bugfixes
 * Completion of the 4.2.11 refresh fix on the Argon HUD side. The accordion-header `uses()` getter was capturing the `OwnedMagicItem` instance by closure, so when `MagicItemActor.buildItems()` rebuilt the actor's items into fresh instances post-cast, the closure still pointed at the dead one — Argon's X/▢ dots stayed at the pre-cast number even after `ui.ARGON.refresh()`. Reworked the closure to resolve the current `OwnedMagicItem` by id from `MagicItemActor.get(actorId).items` on every call, so each render reads the live `uses`. No-op when magicitems isn't bound.

@@ -193,16 +193,24 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   // header to render blank. Default-pack magicitems data ships `charges`
   // as a string (e.g. "10"), so coerce explicitly.
   //
-  // The closure resolves the *current* `OwnedMagicItem` by id on every
-  // call. After a cast, `MagicItemActor.buildItems()` (driven by our
-  // `updateItem` hook in module.js) replaces the in-memory instance
-  // with a fresh one carrying the post-cast `uses`. Capturing the
-  // instance directly would freeze the dots at the build-time value.
+  // The closure captures the `MagicItemActor` instance directly (which
+  // is stable — its `.items` array gets replaced on rebuild) plus the
+  // magicitem document id. On each invocation it looks up the current
+  // `OwnedMagicItem` from `mia.items`. After a cast, our `updateItem`
+  // hook (`module.js`) calls `mia.buildItems()` which produces fresh
+  // `OwnedMagicItem` instances carrying the post-cast `uses`; the
+  // capture-by-MIA approach picks them up.
+  //
+  // We deliberately don't use `MagicItemActor.get(actorId)` here — when
+  // the integration's module-scope import resolves to a different
+  // `MAGICITEMS.actors` reference than the singleton being populated
+  // by `MagicItemActor.bind`, `.get()` returns undefined and the
+  // closure falls back to the build-time `ownedMI`, freezing the dots.
   const usesFromMagicItem = (ownedMI) => {
-    const actorId = ownedMI.actor?.id ?? ownedMI.magicItemActor?.id;
+    const mia = ownedMI.magicItemActor;
     const magicItemId = ownedMI.id ?? ownedMI.item?.id;
     return () => {
-      const live = MagicItemActor.get(actorId)?.items?.find((i) => i.id === magicItemId) ?? ownedMI;
+      const live = (mia?.items ?? []).find((i) => i.id === magicItemId) ?? ownedMI;
       const max = Number(live.charges);
       const value = Number(live.uses);
       return {
