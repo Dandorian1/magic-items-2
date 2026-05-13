@@ -2,6 +2,8 @@ import CONSTANTS from "../constants/constants.js";
 import Logger from "../lib/Logger.js";
 import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
 
+const renderTemplateV2 = foundry.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
+
 export class AbstractOwnedMagicItemEntry {
   constructor(magicItem, item) {
     this.magicItem = magicItem;
@@ -166,7 +168,7 @@ export class AbstractOwnedMagicItemEntry {
   }
 
   async askSummonningMessage(summonOptions) {
-    let html = await renderTemplate(
+    let html = await renderTemplateV2(
       `modules/${CONSTANTS.MODULE_ID}/templates/magic-item-summon-dialog.hbs`,
       summonOptions,
     );

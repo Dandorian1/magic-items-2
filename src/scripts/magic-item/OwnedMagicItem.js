@@ -245,7 +245,6 @@ export class OwnedMagicItem extends MagicItem {
       }
       ChatMessage.create({
         speaker: { actor: this.actor },
-        type: CONST.CHAT_MESSAGE_TYPES.OTHER,
         content: this.formatMessage(msg),
       });
     } else {
