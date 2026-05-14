@@ -122,7 +122,6 @@ export async function runMacroOnExplicitActor(explicitActor, macroReference, ...
             ${macro.command}
           })();`;
       }
-      // eslint-disable-next-line no-new-func -- macro execution requires dynamic code
       const fn = Function("speaker", "actor", "token", "character", "event", "args", body);
 
       Logger.debug("runMacro | ", { body, fn });

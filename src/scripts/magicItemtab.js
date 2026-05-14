@@ -2,37 +2,29 @@ import CONSTANTS from "./constants/constants.js";
 import { MagicItem } from "./magic-item/MagicItem.js";
 import { MagicItemHelpers } from "./magic-item-helpers.js";
 import Logger from "./lib/Logger.js";
-import {
-  ItemSheetClass,
-  renderTemplate as renderTemplateV2,
-  DragDropClass,
-  TextEditorImpl,
-} from "./lib/foundry-compat.js";
+import { renderTemplate as renderTemplateV2, DragDropClass, TextEditorImpl } from "./lib/foundry-compat.js";
 
 const magicItemTabs = [];
 
 export class MagicItemTab {
   static bind(app, html, item) {
-    const document = app.item ?? app.document ?? item?.document ?? item?.item;
-    if (MagicItemTab.isAcceptedItemType(document)) {
+    const doc = app.item ?? app.document ?? item?.document ?? item?.item;
+    if (MagicItemTab.isAcceptedItemType(doc)) {
       let tab = magicItemTabs[app.id];
       if (!tab) {
         tab = new MagicItemTab(app);
         magicItemTabs[app.id] = tab;
       }
-      tab.init(MagicItemHelpers.normalizeHtml(html), item, app, document);
+      tab.init(MagicItemHelpers.normalizeHtml(html), item, app, doc);
     }
   }
 
   constructor(app) {
-    if (app.setPosition && typeof ItemSheetClass !== "undefined" && !MagicItemTab.isApplicationV2(app)) {
-      this.hack(app);
-    }
     this.activate = false;
   }
 
-  init(html, data, app, document) {
-    this.item = document ?? app.item ?? app.document;
+  init(html, data, app, doc) {
+    this.item = doc ?? app.item ?? app.document;
     this.html = this.getSheetRoot(html);
     this.editable = data?.editable ?? app.isEditable ?? this.item?.isOwner;
 
@@ -41,15 +33,28 @@ export class MagicItemTab {
       return; // Already initialized, duplication bug!
     }
 
-    const tabLink = tabs.hasClass("sheet-tabs")
-      ? $(`<a data-action="tab" data-group="primary" data-tab="${CONSTANTS.MODULE_ID}"><span>Magic Item</span></a>`)
-      : $(`<a class="item" data-tab="${CONSTANTS.MODULE_ID}">Magic Item</a>`);
-    tabs.append(tabLink);
-    tabLink.on("click", () => {
+    const tabLink = document.createElement("a");
+    if (tabs.hasClass("sheet-tabs")) {
+      tabLink.dataset.action = "tab";
+      tabLink.dataset.group = "primary";
+      tabLink.dataset.tab = CONSTANTS.MODULE_ID;
+      const span = document.createElement("span");
+      span.textContent = "Magic Item";
+      tabLink.appendChild(span);
+    } else {
+      tabLink.className = "item";
+      tabLink.dataset.tab = CONSTANTS.MODULE_ID;
+      tabLink.textContent = "Magic Item";
+    }
+    tabs.append(tabLink); // jQuery .append accepts native HTMLElement
+    tabLink.addEventListener("click", () => {
       window.setTimeout(() => this.adjustSheetSize(app), 0);
     });
 
-    const tabContent = $(`<div class="tab magicitems" data-group="primary" data-tab="${CONSTANTS.MODULE_ID}"></div>`);
+    const tabContent = document.createElement("div");
+    tabContent.className = "tab magicitems";
+    tabContent.dataset.group = "primary";
+    tabContent.dataset.tab = CONSTANTS.MODULE_ID;
     const body = this.html.find(".sheet-body, .window-content, form").first();
     body.append(tabContent);
 
@@ -105,25 +110,6 @@ export class MagicItemTab {
   static isApplicationV2(app) {
     const applicationV2 = foundry?.applications?.api?.ApplicationV2;
     return Boolean(applicationV2 && app instanceof applicationV2);
-  }
-
-  // C4 in tech-debt plan — replace this prototype-walk monkey-patch in 4.4.0.
-  hack(app) {
-    const originalSetPosition = app.setPosition.bind(app);
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const tab = this;
-    app.setPosition = function (position = {}) {
-      position.height = tab.isActive() && !position.height ? "auto" : position.height;
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
-      let that = this;
-      for (let i = 0; i < 100 && that; i++) {
-        if (that.constructor?.name === ItemSheetClass.name && typeof that.setPosition === "function") {
-          return that.setPosition.apply(this, [position]);
-        }
-        that = Object.getPrototypeOf(that);
-      }
-      return originalSetPosition(position);
-    };
   }
 
   async render(app) {
@@ -188,8 +174,18 @@ export class MagicItemTab {
     const maxWidth = Math.max(700, viewportWidth - 32);
     const width = Math.min(Math.max(currentWidth, targetWidth), maxWidth);
 
+    // When the Magic Item tab is active, force `height: "auto"` so the
+    // sheet expands to fit the rows (replaces the prior `hack()` monkey-patch).
+    // Only meaningful on v1 sheets; v2 sheets auto-size via their own
+    // ApplicationV2 lifecycle.
+    const isActive = this.isActive();
+    const isV2 = MagicItemTab.isApplicationV2(app);
+    const heightOverride = isActive && !isV2 ? "auto" : undefined;
+
     if (width > currentWidth + 8) {
-      app.setPosition({ width });
+      app.setPosition(heightOverride ? { width, height: heightOverride } : { width });
+    } else if (heightOverride) {
+      app.setPosition({ height: heightOverride });
     } else {
       app.setPosition();
     }
@@ -391,8 +387,8 @@ export class MagicItemTab {
     return ["weapon", "equipment", "consumable", "tool", "backpack", "feat"];
   }
 
-  static isAcceptedItemType(document) {
-    return MagicItemTab.acceptedItemTypes.includes(document?.type);
+  static isAcceptedItemType(doc) {
+    return MagicItemTab.acceptedItemTypes.includes(doc?.type);
   }
 
   static isAllowedToShow() {

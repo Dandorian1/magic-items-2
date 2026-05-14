@@ -7,6 +7,7 @@ import { OwnedMagicItemFeat } from "../magic-item-owned-entry/OwnedMagicItemFeat
 import { OwnedMagicItemSpell } from "../magic-item-owned-entry/OwnedMagicItemSpell.js";
 import { OwnedMagicItemTable } from "../magic-item-owned-entry/OwnedMagicItemTable.js";
 import { MagicItem } from "./MagicItem.js";
+import { RollImpl, ChatMessageImpl } from "../lib/foundry-compat.js";
 
 export class OwnedMagicItem extends MagicItem {
   constructor(item, actor, magicItemActor, flagsData) {
@@ -20,6 +21,15 @@ export class OwnedMagicItem extends MagicItem {
     this.pack = item.pack;
     this.isDestroyed = false;
     this.uses = parseInt("uses" in flagsData ? flagsData.uses : this.charges);
+
+    // Internal-charges mode: the live charge store is the dnd5e item's
+    // `system.uses`, not the magicitems flags (which stay 0 in this mode).
+    // Snapshot from there so the sheet section, Argon, and consume math all
+    // read real values. Rebuilt on every actor/item update, so it stays current.
+    if (this.internal && this.hasSystemUses()) {
+      this.charges = this.getSystemUsesMax();
+      this.uses = this.getSystemUsesValue();
+    }
 
     this.rechargeableLabel = this.rechargeable
       ? `(${game.i18n.localize("MAGICITEMS.SheetRecharge")}: ${this.rechargeText} ${
@@ -90,19 +100,28 @@ export class OwnedMagicItem extends MagicItem {
       const usage = Math.max(this.getSystemUsesValue() - consumption, 0);
       await this.updateSystemUsesValue(usage);
       this.uses = usage;
+      await this.checkDestroyOnEmpty();
     } else if (this.uses) {
       this.uses = Math.max(this.uses - consumption, 0);
-      // `system.uses` is absent on items without per-item charges (e.g. some
-      // feats); optional-chain so the destroy path still runs in that case.
-      if (!this.item.system.uses?.autoDestroy) {
-        if (await this.destroyed()) {
-          if (this.destroyType === MAGICITEMS.DESTROY_JUST_DESTROY) {
-            this.isDestroyed = true;
-            await this.destroyItem();
-          } else {
-            this.toggleEnabled(false);
-          }
-        }
+      await this.checkDestroyOnEmpty();
+    }
+  }
+
+  /**
+   * Run the destroy-on-0-charges check. Shared by both consume() branches so
+   * system-uses-backed items (e.g. the SRD Staff of Healing) get the check too.
+   * @returns {Promise<void>}
+   */
+  async checkDestroyOnEmpty() {
+    // `system.uses` is absent on items without per-item charges (e.g. some
+    // feats); optional-chain so the destroy path still runs in that case.
+    if (this.item.system.uses?.autoDestroy) return;
+    if (await this.destroyed()) {
+      if (this.destroyType === MAGICITEMS.DESTROY_JUST_DESTROY) {
+        this.isDestroyed = true;
+        await this.destroyItem();
+      } else {
+        this.toggleEnabled(false);
       }
     }
   }
@@ -136,38 +155,17 @@ export class OwnedMagicItem extends MagicItem {
   }
 
   async destroyed() {
-    let destroyed = this.uses === 0 && this.destroy;
-    if (destroyed && this.destroyCheck === "d2") {
-      let r = new Roll("1d20");
-      await r.evaluate();
-      destroyed = r.total === 1;
-      await r.toMessage({
-        flavor: `<b>${this.name}</b> ${game.i18n.localize("MAGICITEMS.MagicItemDestroyCheck")}
-                        - ${
-                          destroyed
-                            ? game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckFailure")
-                            : game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckSuccess")
-                        }`,
-        speaker: ChatMessage.getSpeaker({ actor: this.actor, token: this.actor.token }),
-      });
-    } else if (destroyed && this.destroyCheck === "d3") {
-      let r = new Roll("1d20");
-      await r.evaluate();
-      destroyed = r.total <= this.destroyDC;
-      await r.toMessage({
-        flavor: `<b>${this.name}</b> ${game.i18n.localize("MAGICITEMS.MagicItemDestroyCheck")}
-                        - ${
-                          destroyed
-                            ? game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckFailure")
-                            : game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckSuccess")
-                        }`,
-        speaker: ChatMessage.getSpeaker({ actor: this.actor, token: this.actor.token }),
-      });
-    }
+    if (this.uses !== 0 || !this.destroy) return false;
+    const destroyed = await MagicItemHelpers.rollDestroyCheck({
+      name: this.name,
+      actor: this.actor,
+      destroyCheck: this.destroyCheck,
+      destroyDC: this.destroyDC,
+    });
     if (destroyed) {
-      ChatMessage.create({
+      ChatMessageImpl.create({
         user: game.user.id,
-        speaker: ChatMessage.getSpeaker({ actor: this.actor }),
+        speaker: ChatMessageImpl.getSpeaker({ actor: this.actor }),
         content: this.formatMessage(`<b>${this.name}</b> ${this.destroyFlavorText}`),
       });
     }
@@ -211,7 +209,7 @@ export class OwnedMagicItem extends MagicItem {
         msg += `<b>${prefix}</b>: ${this.recharge} ${postfix}`;
       }
       if (this.rechargeType === MAGICITEMS.FORMULA_RECHARGE) {
-        let r = new Roll(this.recharge);
+        let r = new RollImpl(this.recharge);
         await r.evaluate();
         amount = r.total;
         msg += `<b>${prefix}</b>: ${r.result} = ${r.total} ${postfix}`;
@@ -245,7 +243,7 @@ export class OwnedMagicItem extends MagicItem {
           }
         });
       }
-      ChatMessage.create({
+      ChatMessageImpl.create({
         speaker: { actor: this.actor },
         content: this.formatMessage(msg),
       });

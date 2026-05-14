@@ -63,8 +63,44 @@ the release CI rebuilds the binaries before zipping.
 | `npm run build:db` | Compile `src/packs/_source/<pack>/*.json` → `src/packs/<pack>/*.ldb`. |
 | `npm run build:json` | Inverse: extract LevelDB packs back to JSON sources. |
 | `npm run build:clean` | Re-normalize `src/packs/_source/` JSON (strip flags, fix whitespace). |
-| `npm run lint` / `lint:fix` | ESLint over `src/`. |
+| `npm run lint` / `lint:fix` | ESLint over `src/` and `tests/`. |
 | `npm run prettier-format` | Prettier-format `src/`. |
+| `npm test` | Run the vitest unit + integration suite once. |
+| `npm run test:watch` | Vitest in watch mode for the dev loop. |
+| `npm run test:coverage` | Generate HTML coverage report under `coverage/`. |
+
+## Running tests
+
+The repo has a vitest harness under `tests/`. Tests run against the source
+files under `src/` directly (not the built bundle) with a Foundry mock
+layer in `tests/setup.js`.
+
+```bash
+npm test                 # run once, exit on first failure
+npm run test:watch       # watch mode — reruns on file change
+npm run test:coverage    # HTML report under coverage/index.html
+```
+
+CI runs `npm test` and blocks PR merges on failure (alongside lint +
+prettier + build). The vitest suite is fast — currently ~120 tests
+in under 1 second.
+
+### Test conventions
+
+- One concern per file. Naming: `tests/unit/<area>.test.js` for unit
+  tests, `tests/integration/<flow>.test.js` for cross-helper flows.
+- Use the factories in `tests/helpers/factories.js` (`makeActor`,
+  `makeMagicItem`, `makeSpell`) instead of building fake docs inline.
+- The Foundry mock layer in `tests/setup.js` is reset before every
+  test (`beforeEach`). Per-test mock customizations live in the
+  test body, not in a separate setup file.
+- For private helpers tested via the `__test__` export (currently
+  in `OwnedMagicItemSpell.js` and `argon.js`): import via
+  `import { __test__ } from "..."; const { fn } = __test__;`. The
+  export is convention-only and not for production use.
+- **Convention:** every bug fix or new feature commit should include
+  at least one test that pins the new behaviour. Tests are easier
+  to write than smoke-test recipes are to remember.
 
 ## Project layout
 
@@ -152,6 +188,32 @@ https://github.com/<owner>/magic-items-2/releases/download/<tag>/module.json
 
 When the prerelease passes the smoke-test cycle, tag a final release
 without the `-test.N` suffix to trigger the foundryvtt.com publish.
+
+## Watch list
+
+Things to migrate to when upstream changes land:
+
+- **Argon (enhancedcombathud-dnd5e) public API.** Our integration in
+  `src/scripts/integrations/argon.js` uses libWrapper + the
+  `render<ConstructorName>ArgonComponent` render hooks to capture
+  Argon's closure-private classes. If Argon ships a stable public
+  `api` (e.g. `enhancedcombathud.api.registerSpellGroup`),
+  migrate to it for cleaner version-compat.
+- **v1 sheet hooks (`renderItemSheet5e`, `renderActorSheet5eCharacter`,
+  `renderActorSheet5eNPC`).** Foundry v14 may drop these. When it
+  does, the v1 sheet decorator in `magicItemtab.js` + `magicitemsheet.js`
+  can go too, plus the jQuery shim in `magic-item-helpers.js`. Track
+  v14 release notes.
+- **`Handlebars` global.** Foundry v14 introduces
+  `foundry.applications.handlebars.registerHelper`. Our
+  `_hbRegister` shim in `module.js` already prefers the namespaced
+  path; when v15 removes the global, drop the fallback.
+
+## Pack migration
+
+See [`docs/pack-migration.md`](docs/pack-migration.md) for the recipe
+to migrate the bundled compendium packs when dnd5e ships a schema
+change.
 
 ## Style
 

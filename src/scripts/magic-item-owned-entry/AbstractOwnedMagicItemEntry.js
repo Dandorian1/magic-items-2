@@ -1,7 +1,8 @@
 import CONSTANTS from "../constants/constants.js";
 import Logger from "../lib/Logger.js";
 import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
-import { renderTemplate as renderTemplateV2 } from "../lib/foundry-compat.js";
+import { renderTemplate as renderTemplateV2, ChatMessageImpl } from "../lib/foundry-compat.js";
+import { MagicItemHelpers } from "../magic-item-helpers.js";
 
 export class AbstractOwnedMagicItemEntry {
   constructor(magicItem, item) {
@@ -78,38 +79,17 @@ export class AbstractOwnedMagicItemEntry {
   }
 
   async destroyed() {
-    let destroyed = this.uses === 0 && this.magicItem.destroy;
-    if (destroyed && this.magicItem.destroyCheck === "d2") {
-      let r = new Roll("1d20");
-      await r.evaluate();
-      destroyed = r.total === 1;
-      await r.toMessage({
-        flavor: `<b>${this.name}</b> ${game.i18n.localize("MAGICITEMS.MagicItemDestroyCheck")}
-            - ${
-              destroyed
-                ? game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckFailure")
-                : game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckSuccess")
-            }`,
-        speaker: ChatMessage.getSpeaker({ actor: this.magicItem.actor, token: this.magicItem.actor.token }),
-      });
-    } else if (destroyed && this.magicItem.destroyCheck === "d3") {
-      let r = new Roll("1d20");
-      await r.evaluate();
-      destroyed = r.total <= this.destroyDC;
-      await r.toMessage({
-        flavor: `<b>${this.name}</b> ${game.i18n.localize("MAGICITEMS.MagicItemDestroyCheck")}
-                        - ${
-                          destroyed
-                            ? game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckFailure")
-                            : game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckSuccess")
-                        }`,
-        speaker: ChatMessage.getSpeaker({ actor: this.actor, token: this.actor.token }),
-      });
-    }
+    if (this.uses !== 0 || !this.magicItem.destroy) return false;
+    const destroyed = await MagicItemHelpers.rollDestroyCheck({
+      name: this.name,
+      actor: this.magicItem.actor,
+      destroyCheck: this.magicItem.destroyCheck,
+      destroyDC: this.destroyDC,
+    });
     if (destroyed) {
-      ChatMessage.create({
+      ChatMessageImpl.create({
         user: game.user.id,
-        speaker: ChatMessage.getSpeaker({ actor: this.magicItem.actor }),
+        speaker: ChatMessageImpl.getSpeaker({ actor: this.magicItem.actor }),
         content: this.magicItem.formatMessage(`<b>${this.name}</b> ${this.magicItem.destroyFlavorText}`),
       });
     }
@@ -228,9 +208,9 @@ export class AbstractOwnedMagicItemEntry {
       const maxCharges = parseInt("uses" in this.item ? this.item.uses : this.magicItem.charges);
       Logger.debug(`Charges: ${charges}, MaxCharges: ${maxCharges}`);
       if (charges !== 0) {
-        ChatMessage.create({
+        ChatMessageImpl.create({
           user: game.user.id,
-          speaker: ChatMessage.getSpeaker({ actor: this.magicItem.actor, token: this.magicItem.actor.token }),
+          speaker: ChatMessageImpl.getSpeaker({ actor: this.magicItem.actor, token: this.magicItem.actor.token }),
           content: game.i18n.format(game.i18n.localize("MAGICITEMS.ShowChargesMessage"), {
             name: this.magicItem.name,
             chargesLeft: charges,

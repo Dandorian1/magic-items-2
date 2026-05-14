@@ -316,8 +316,18 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
       const actor = globalThis.game?.actors?.get?.(actorId);
       const item = actor?.items?.get?.(magicItemId);
       const flags = item?.flags?.[CONSTANTS.MODULE_ID] ?? {};
-      const max = Number(flags.charges ?? ownedMI.charges);
-      const value = Number(flags.uses ?? ownedMI.uses);
+      let max;
+      let value;
+      // Internal-charges mode: the live store is the dnd5e item's
+      // `system.uses`, not the magicitems flags (which stay 0 in this mode).
+      const sysUses = flags.internal ? item?.system?.uses : null;
+      if (sysUses) {
+        max = Number(sysUses.max);
+        value = Number(sysUses.value ?? Math.max((Number(sysUses.max) || 0) - (Number(sysUses.spent) || 0), 0));
+      } else {
+        max = Number(flags.charges ?? ownedMI.charges);
+        value = Number(flags.uses ?? ownedMI.uses);
+      }
       return {
         max: Number.isFinite(max) ? max : 0,
         value: Number.isFinite(value) ? value : 0,
@@ -486,3 +496,12 @@ Hooks.on("argonInit", () => {
     }
   });
 });
+
+// Test-only handle on file-private helpers. Not for production use.
+export const __test__ = {
+  buildButton,
+  preloadMagicItemSpellSources,
+  getSyntheticFlag,
+  injectMagicItemSpells,
+  invalidateSourceUuid,
+};

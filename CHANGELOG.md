@@ -1,3 +1,111 @@
+### 5.0.3
+#### Bug fix — `updateInternalCharges()` dnd5e 5.x `system.uses` schema
+Completes the 5.0.2 internal-charges fix. `MagicItem.updateInternalCharges()` — called by `module.js`'s second `updateItem` hook on *every* update to an internal-charges item, then persisted to the flags via `update()` — read the pre-5.x `system.uses.per` field (gone in dnd5e 5.x), always hit its else branch, and wrote `charges: 0, uses: 0` back to the flags. That clobbered the 5.0.2 constructor snapshot on every update. Rewrote it for the dnd5e 5.x schema: `max` resolves to a number, `value` is a derived getter (`max - spent`), and `recovery` is an array of `{period, type, formula}`. `chargesTypeCompatible()` likewise rewritten to read a 5.x recovery profile. Internal-charges magic items now show their real charge count in the dnd5e inventory, the magicitems sheet section, and the Argon HUD consistently.
+
+Smoke-tested live on Foundry 13.351 + dnd5e 5.3.2.
+
+### 5.0.2
+#### Bug fixes — dnd5e 5.x `system.uses` alignment
+The 5.0.0 audit covered dnd5e 5.x's *spell* schema changes (D1–D4) but missed its **`system.uses` schema** changes. Three bugs traced to that gap:
+
+* **Destroy-on-0-charges never fired for system-uses-backed magic items.** `OwnedMagicItem.consume()` only ran the destroy check in its flag-based-charges branch; magic items on a dnd5e item with native `system.uses` (e.g. the SRD Staff of Healing) take the *other* branch, which skipped it entirely. Extracted the check into `checkDestroyOnEmpty()` and call it from both branches. The check still self-gates on the "Destroy Item at 0 charges" flag, so items without the rule are unaffected.
+* **"Use item internal charges" mode showed 0 charges in the magicitems sheet section and the Argon HUD.** `OwnedMagicItem`'s `charges`/`uses` are flag-derived, but in internal-charges mode the live store is the dnd5e item's `system.uses` and the flags stay 0. The constructor now snapshots `charges`/`uses` from `system.uses` when `internal` is set (rebuilt on every actor/item update, so it stays current), and `integrations/argon.js`'s `usesFromMagicItem` reads `system.uses` directly for internal-mode items.
+* Known follow-up: `MagicItem.updateInternalCharges()`'s *recharge-config* fields (`recharge`/`rechargeUnit`/`rechargeType`) still read the pre-5.x `system.uses.per` / scalar `recovery` schema — the charge-count fixes above don't depend on it, so it's deferred.
+
+Smoke-tested live on Foundry 13.351 + dnd5e 5.3.2.
+
+### 5.0.1
+#### Bug fix
+* **Magic Item tab missing on every item sheet — regression from 5.0.0's D4 jQuery cleanup.** `MagicItemTab.init()`'s fourth parameter is named `document` (the Foundry item document), which shadowed the global `window.document`. 5.0.0 swapped `$()` element construction for `document.createElement(...)`, so those calls resolved to the item document — which has no `.createElement` — and threw `TypeError`, aborting tab injection before the tab was ever added. Renamed the shadowing identifier to `doc` in `MagicItemTab.bind()`, `init()`, and `isAcceptedItemType()` so the `createElement` calls resolve to the global. Smoke-tested live on Foundry 13.351 + dnd5e 5.3.2.
+
+### 5.0.0
+#### Tech-debt phase 5 — long-tail cleanup
+No end-user runtime changes. The major-version bump reflects breaking changes on the **contributor / development surface** (dep majors, lint config format) — Foundry installs are unaffected. Smoke-tested live on Foundry 13.351 + dnd5e 5.3.3 + midi-qol + chris-premades + Argon.
+
+#### Code cleanup
+* **C5 — Roll / ChatMessage namespaced.** Bare `new Roll(...)` and `ChatMessage.create(...)` calls now route through `RollImpl` / `ChatMessageImpl` constants exported from `src/scripts/lib/foundry-compat.js`. The constants resolve to `CONFIG.Dice.rolls[0]` and `CONFIG.ChatMessage.documentClass` respectively (with bare-global fallback for pre-`ready` code paths). dnd5e's ChatMessage5e has card-render hooks midi-qol expects; routing through CONFIG keeps system overrides intact. 5 call sites updated.
+* **D4 partial — jQuery surface minimized.** `MagicItem.sheetEditable` rewrites `$(form).hasClass(...)` to `form.classList.contains(...)`. `MagicItemTab.init()` builds the tab link and content panel via `document.createElement` instead of `$()` string-HTML construction. Remaining jQuery is the `normalizeHtml` bridge for v1 sheet hooks and the `.find()` chains on the bridged jQuery — those stay until Foundry v14 drops v1 sheets entirely.
+* **C3 (deferred from 4.3.1) re-checked:** the `magic-items-2.` pack-id retro-compat shim was already removed; no action needed.
+
+#### Documentation
+* **A3 — pack migration recipe.** New `docs/pack-migration.md`: step-by-step recipe for re-saving the bundled compendium packs through a new dnd5e schema (open in test world → close to trigger Foundry's data prep → `npm run build:json` → `npm run build:clean` → diff-review → commit).
+* **A4 — Argon API watch-list.** New "Watch list" section in `CONTRIBUTING.md` tracks upstream changes worth migrating to when they land: Argon's eventual public API, v14's deprecation of v1 sheet hooks, v15's removal of the `Handlebars` global.
+
+#### Dep-major upgrade (D3, full scope)
+Pre-upgrade `npm install` reported 16 vulnerabilities (1 low, 13 moderate, 2 high). Bumped:
+
+| Dep | Before | After | Notes |
+|---|---|---|---|
+| `eslint` | 8.57 | **9.10** | **Flat config migration** — see below. |
+| `@typescript-eslint/eslint-plugin` | 7.1 | — | Replaced by unified `typescript-eslint` 8.6 package. |
+| `eslint-config-prettier` | 9.1 | 10.0 | Flat-config-native. |
+| `eslint-plugin-jsdoc` | 46.10 | 50.2 | Flat-config-native. |
+| `eslint-plugin-prettier` | 5.1 | 5.2 | |
+| `vite` | 4.5 | **6.0** | |
+| `vite-plugin-static-copy` | 0.17 | 2.0 | |
+| `rollup` | 3.29 | 4.21 | Via vite; we don't use rollup directly. |
+| `prettier` | 3.2 | 3.6 | |
+| `husky` | 8.0 | 9.1 | `.husky/pre-commit` simplified — dropped the `_/husky.sh` boilerplate. |
+| `lint-staged` | 13.3 | 15.2 | |
+
+**Removed (unused after Phase 1's audit confirmed no source consumers):**
+- `@babel/eslint-parser` (espree handles ES2022 natively)
+- `@typhonjs-config/eslint-config`, `@typhonjs-fvtt/eslint-config-foundry.js` (not used by the flat config)
+- `svelte`, `svelte-dnd-action`, `svelte-preprocess`, `@sveltejs/vite-plugin-svelte` (no `.svelte` files in src/)
+- `vite-plugin-clean` (redundant with `utils/clean.mjs`)
+- `vite-plugin-run` (replaced by `sass` step in npm scripts)
+
+**Added (for flat-config support):**
+- `globals` 15.x (centralized globals registry used by `eslint.config.js`)
+- `typescript-eslint` 8.x (unified plugin + parser package)
+
+#### ESLint 9 flat config migration
+* `.eslintrc.json` and `.eslintignore` deleted.
+* New `eslint.config.js` at the repo root:
+  - Imports `@eslint/js`, `typescript-eslint`, `eslint-plugin-jsdoc`, `eslint-plugin-prettier`, `eslint-config-prettier`.
+  - Uses the `globals` package for browser/node/jquery globals plus the module's Foundry globals list.
+  - One `files: ["src/**/*.js", "tests/**/*.js"]` block with shared rules.
+  - One `files: ["tests/**/*.js"]` block with relaxed rules for vitest test code.
+  - One top-level `ignores` block replaces `.eslintignore`.
+* npm scripts: `eslint --ext .js ./src ./tests` → `eslint src tests` (flat config doesn't need `--ext`).
+
+#### Vite 6 plugin overhaul
+* `vite.config.mjs`: dropped the Svelte plugin (no `.svelte` files), `vite-plugin-run` (replaced by `npm run build:sass` step), `vite-plugin-clean` (redundant with `utils/clean.mjs`).
+* Trimmed `viteStaticCopy` targets to the directories that actually exist under `src/` — `vite-plugin-static-copy` 2.x errors on empty patterns, where 0.17 silently no-op'd.
+* New `build:sass` npm script chained into `build` / `build:watch` / `build:watchWithDb`.
+
+#### Husky 9
+* `.husky/pre-commit` simplified from the 4-line v8 layout (with `_/husky.sh` source) to just the command (`npx lint-staged`). The husky 9 install hook handles the rest.
+
+### 4.5.0
+#### Tech-debt phase 4 — automated test harness
+
+No runtime behaviour changes. This release ends the "manual smoke-test is the only thing standing between us and a regression" era — every shipped bug fix from 4.2.18 onward is now pinned by an automated test that CI runs on every push.
+
+* **`vitest` + `jsdom` + Foundry mock layer.** Tests run against the source files under `src/` directly (not the built bundle) with `tests/setup.js` installing global mocks for `Hooks`, `game`, `CONFIG`, `foundry.utils`, `foundry.applications.*`, `Roll`, `ChatMessage`, `ActiveEffect`, `fromUuid`/`fromUuidSync`, `canvas`, etc. `beforeEach` resets all mocks. Factories in `tests/helpers/factories.js` (`makeActor`, `makeMagicItem`, `makeSpell`) keep test code terse.
+* **113 tests across 8 unit files + 3 integration files.** All shipped regressions covered: B1–B6 (4.2.18), D1–D3 (4.3.0 activities), C6/C7 (4.4.0 dedup + activity-effect guard), A1 (4.4.0 WeakMap + synthetic-actor side index). Plus broader coverage: `MagicItemSpell.prepareDisplay` across both schemas, `MagicItemActor.buildItems` flag filter, Argon synthetic-spell flag detection, transient cleanup lifecycle hooks.
+* **`__test__` named exports** at the bottom of `src/scripts/magic-item-owned-entry/OwnedMagicItemSpell.js` and `src/scripts/integrations/argon.js` expose file-private helpers (`buildSpellData`, `iterActivities`, `midiHasActiveWorkflow`, `scheduleTransientCleanup`, `safeDeleteTransient`, `filterTransientsFromSheet`; `buildButton`, `preloadMagicItemSpellSources`, `getSyntheticFlag`, `injectMagicItemSpells`, `invalidateSourceUuid`) for direct unit testing. Marked test-only; not for production use.
+* **`hook-wiring.test.js`** asserts every documented `Hooks.on(...)` / `Hooks.once(...)` registration in `module.js` + `OwnedMagicItemSpell.js` + `argon.js` lands at module-load time. Catches "I deleted a hook by accident" regressions without a manual smoke test.
+
+#### CI
+* New `Run tests: npm test` step in `.github/workflows/ci.yml`, between the Prettier check and the compendium-pack compile. Failing tests block PR merges (the `build` job is already a required check on master via the branch ruleset).
+* `npm run lint` now lints both `src/` and `tests/`. `.eslintrc.json` gets a `tests/**/*` overrides block declaring vitest globals (`describe`, `it`, `expect`, `vi`, `beforeEach`, etc.) and relaxing the noisier JSDoc / unused-var rules for test code.
+
+#### Documentation
+* `CONTRIBUTING.md` gains a "Running tests" section: `npm test` / `npm run test:watch` / `npm run test:coverage`, the Foundry-mock-layer convention, the `__test__` export pattern, and "every bug fix or feature commit should include a test" as the going-forward rule.
+
+### 4.4.0
+#### Tech-debt phase 3 — architecture cleanup
+No new functionality. Four targeted refactors that pay down the highest-leverage architecture debt while keeping the runtime contract identical for every user-visible path.
+
+* **A1 — `MAGICITEMS.actors` singleton → WeakMap.** Replaced the JS-object-as-map-on-an-array storage (`MAGICITEMS.actors = []`, indexed by `actor.id`) with a `WeakMap<Actor, MagicItemActor>` keyed by the live Actor document, plus a side `Map<actorId, MagicItemActor>` index for unlinked / synthetic token actors whose IDs aren't in `game.actors`. `MagicItemActor.get(actorId)` interface is preserved (16+ call sites unchanged); added `MagicItemActor.getForActor(actor)` as the fast path for callers that already hold the document reference. Eliminates the storage-hygiene root cause of the 4.2.12–4.2.15 stale-charge-dot regressions.
+* **C6 — DRY destroyed() d20 roll.** Extracted `MagicItemHelpers.rollDestroyCheck({name, actor, destroyCheck, destroyDC})` to share the d20 / destroyCheck / chat-message logic between `OwnedMagicItem.destroyed()` and `AbstractOwnedMagicItemEntry.destroyed()`. Both call sites are now 12 lines instead of 35.
+* **C7 — Activity-aware effect application.** `OwnedMagicItemSpell.roll()` now skips the manual `applyActiveEffects()` path when the spell has activity-level effects (`system.activities[*].effects`) — those are applied by dnd5e's own workflow during `.use()`, so the prior unconditional manual apply was double-stacking effects on dnd5e 5.x spells without midi-qol. Legacy spells with bare `item.effects` and no activity effects still take the manual path.
+* **C4 — Removed `MagicItemTab.hack()` prototype-walk.** Replaced the 17-line `setPosition` monkey-patch that walked the prototype chain looking for the dnd5e `ItemSheet` ancestor with an in-place `setPosition({height: "auto"})` call from `adjustSheetSize()` when the magic-item tab is active. v2 sheets already auto-size via ApplicationV2 lifecycle and are explicitly skipped. The constructor lost its conditional hack-install branch; the unused `ItemSheetClass` import was dropped from `magicItemtab.js`.
+
+#### Deferred
+* D4 (jQuery → native DOM in `OwnedMagicItemSpell.js` + `argon.js`) deferred to Phase 5. Re-audit showed both files are already jQuery-free in their hot paths; only sheet/UI files have remaining jQuery touches.
+
 ### 4.3.2
 #### Tech-debt phase 2 — CI quality gates
 

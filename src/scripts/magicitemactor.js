@@ -1,31 +1,48 @@
-import { MAGICITEMS } from "./config.js";
 import CONSTANTS from "./constants/constants.js";
 import Logger from "./lib/Logger.js";
 import { RetrieveHelpers } from "./lib/retrieve-helpers.js";
 import { MagicItemHelpers } from "./magic-item-helpers.js";
 import { OwnedMagicItem } from "./magic-item/OwnedMagicItem.js";
 
+// Primary: WeakMap keyed by the live Actor doc (auto-evicts on GC).
+// Side index by id covers unlinked token actors whose synthetic id isn't in game.actors.
+const _miasByActor = new WeakMap();
+const _miasById = new Map();
+
 /**
  * "Aspect" class that dynamically extends the original Actor in order to handle magic items.
  */
 export class MagicItemActor {
   /**
-   * Create and register a new MagicItemActor.
-   *
-   * @param actor
+   * @param actor live Actor document
    */
   static bind(actor) {
-    MAGICITEMS.actors[actor.id] = new MagicItemActor(actor);
+    if (!actor) return;
+    const mia = new MagicItemActor(actor);
+    _miasByActor.set(actor, mia);
+    if (actor.id) _miasById.set(actor.id, mia);
   }
 
   /**
-   * Get a registered MagicItemActor.
-   *
-   * @param actorId   id of the original actor.
-   * @returns {*}     the MagicItemActor associated with the actor by actorId.
+   * @param actor live Actor document
+   * @returns the MIA for this actor, or undefined.
+   */
+  static getForActor(actor) {
+    return actor ? _miasByActor.get(actor) : undefined;
+  }
+
+  /**
+   * @param actorId id of the original actor
+   * @returns the MIA, or undefined if the actor isn't bound.
    */
   static get(actorId) {
-    return MAGICITEMS.actors[actorId];
+    const actor = globalThis.game?.actors?.get?.(actorId);
+    if (actor) {
+      const mia = _miasByActor.get(actor);
+      if (mia) return mia;
+    }
+    // Unlinked / synthetic token actors aren't in game.actors.
+    return _miasById.get(actorId);
   }
 
   /**

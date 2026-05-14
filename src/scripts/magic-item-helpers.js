@@ -1,6 +1,7 @@
 import CONSTANTS from "./constants/constants.js";
 import Logger from "./lib/Logger.js";
 import { isRealNumber, isEmptyObject } from "./lib/lib.js";
+import { RollImpl, ChatMessageImpl } from "./lib/foundry-compat.js";
 
 export class MagicItemHelpers {
   static isUsingNew5eSheet(sheet) {
@@ -22,6 +23,33 @@ export class MagicItemHelpers {
 
   static isLevelScalingSettingOn() {
     return game.settings.get(CONSTANTS.MODULE_ID, "scaleSpellDamage");
+  }
+
+  /**
+   * Roll the d20 destroy-check used by both `OwnedMagicItem.destroyed()`
+   * and `AbstractOwnedMagicItemEntry.destroyed()`. Posts the roll +
+   * success/failure flavor to chat.
+   *
+   * @param {object} opts
+   * @param {string} opts.name           Magic-item or entry name (for chat).
+   * @param {Actor}  opts.actor          Speaker actor.
+   * @param {string} opts.destroyCheck   "d2" (destroy on natural 1), "d3" (destroy on roll <= DC), else auto-destroy.
+   * @param {number} [opts.destroyDC]    DC for "d3" mode.
+   * @returns {Promise<boolean>}         true if the item should be destroyed.
+   */
+  static async rollDestroyCheck({ name, actor, destroyCheck, destroyDC }) {
+    if (destroyCheck !== "d2" && destroyCheck !== "d3") return true;
+    const r = new RollImpl("1d20");
+    await r.evaluate();
+    const destroyed = destroyCheck === "d2" ? r.total === 1 : r.total <= destroyDC;
+    const verdict = destroyed
+      ? game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckFailure")
+      : game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckSuccess");
+    await r.toMessage({
+      flavor: `<b>${name}</b> ${game.i18n.localize("MAGICITEMS.MagicItemDestroyCheck")} - ${verdict}`,
+      speaker: ChatMessageImpl.getSpeaker({ actor, token: actor?.token }),
+    });
+    return destroyed;
   }
 
   static canSummon() {

@@ -341,7 +341,7 @@ export class MagicItem {
   }
 
   get sheetEditable() {
-    return $(this.actor.sheet.form).hasClass("editable");
+    return this.actor.sheet?.form?.classList?.contains("editable") ?? false;
   }
 
   async renderSheet(itemId) {
@@ -377,16 +377,21 @@ export class MagicItem {
   async updateInternalCharges(isChecked, item) {
     this.internal = isChecked;
     let itemData = await RetrieveHelpers.getItemAsync(item);
-    const itemChargeData = itemData.system.uses;
-    if (isChecked && itemChargeData?.per) {
-      this.charges = itemChargeData.max;
-      this.uses = itemChargeData.value;
+    const itemChargeData = itemData.system?.uses;
+    // dnd5e 5.x `system.uses`: `max` resolves to a number, `value` is a derived
+    // getter (max - spent), and `recovery` is an array of `{period, type,
+    // formula}`. The pre-5.x scalar `per` / scalar `recovery` fields are gone.
+    const max = Number(itemChargeData?.max) || 0;
+    if (isChecked && max > 0) {
+      const recovery = Array.isArray(itemChargeData?.recovery) ? itemChargeData.recovery[0] : null;
+      this.charges = max;
+      this.uses = Number(itemChargeData?.value ?? Math.max(max - (Number(itemChargeData?.spent) || 0), 0));
       this.chargeType = MAGICITEMS.CHARGE_TYPE_WHOLE_ITEM;
       this.rechargeable = false;
-      this.recharge = itemChargeData.recovery;
-      this.rechargeType = this.chargesTypeCompatible(itemChargeData);
-      this.rechargeUnit = MAGICITEMS.RECHARGE_TRANSLATION[itemChargeData.per];
-    } else if (isChecked && !itemChargeData?.per) {
+      this.recharge = recovery?.formula ?? 0;
+      this.rechargeType = this.chargesTypeCompatible(recovery);
+      this.rechargeUnit = MAGICITEMS.RECHARGE_TRANSLATION[recovery?.period] ?? "";
+    } else if (isChecked) {
       this.charges = 0;
       this.uses = 0;
       this.chargeType = MAGICITEMS.CHARGE_TYPE_WHOLE_ITEM;
@@ -396,13 +401,17 @@ export class MagicItem {
     }
   }
 
-  chargesTypeCompatible(chargeData) {
-    if (["lr", "sr", "day"].includes(chargeData.per)) {
-      return MAGICITEMS.FORMULA_FULL;
-    } else if (NumberUtils.parseIntOrGetDefault(chargeData.recovery, 0) !== 0) {
+  chargesTypeCompatible(recovery) {
+    if (!recovery) {
       return MAGICITEMS.NUMERIC_RECHARGE;
-    } else {
+    }
+    // dnd5e 5.x recovery profile: { period, type, formula }.
+    if (recovery.type === "recoverAll" || recovery.type === "loseAll") {
+      return MAGICITEMS.FORMULA_FULL;
+    }
+    if (recovery.type === "formula" && recovery.formula) {
       return MAGICITEMS.FORMULA_RECHARGE;
     }
+    return MAGICITEMS.NUMERIC_RECHARGE;
   }
 }

@@ -1,7 +1,5 @@
 export const MAGICITEMS = {};
 
-MAGICITEMS.actors = [];
-
 MAGICITEMS.rechargeUnits = {
   r1: "MAGICITEMS.RechargeUnitDaily",
   r2: "MAGICITEMS.RechargeUnitDawn",
