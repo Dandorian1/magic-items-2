@@ -1,3 +1,13 @@
+### 5.0.2
+#### Bug fixes — dnd5e 5.x `system.uses` alignment
+The 5.0.0 audit covered dnd5e 5.x's *spell* schema changes (D1–D4) but missed its **`system.uses` schema** changes. Three bugs traced to that gap:
+
+* **Destroy-on-0-charges never fired for system-uses-backed magic items.** `OwnedMagicItem.consume()` only ran the destroy check in its flag-based-charges branch; magic items on a dnd5e item with native `system.uses` (e.g. the SRD Staff of Healing) take the *other* branch, which skipped it entirely. Extracted the check into `checkDestroyOnEmpty()` and call it from both branches. The check still self-gates on the "Destroy Item at 0 charges" flag, so items without the rule are unaffected.
+* **"Use item internal charges" mode showed 0 charges in the magicitems sheet section and the Argon HUD.** `OwnedMagicItem`'s `charges`/`uses` are flag-derived, but in internal-charges mode the live store is the dnd5e item's `system.uses` and the flags stay 0. The constructor now snapshots `charges`/`uses` from `system.uses` when `internal` is set (rebuilt on every actor/item update, so it stays current), and `integrations/argon.js`'s `usesFromMagicItem` reads `system.uses` directly for internal-mode items.
+* Known follow-up: `MagicItem.updateInternalCharges()`'s *recharge-config* fields (`recharge`/`rechargeUnit`/`rechargeType`) still read the pre-5.x `system.uses.per` / scalar `recovery` schema — the charge-count fixes above don't depend on it, so it's deferred.
+
+Smoke-tested live on Foundry 13.351 + dnd5e 5.3.2.
+
 ### 5.0.1
 #### Bug fix
 * **Magic Item tab missing on every item sheet — regression from 5.0.0's D4 jQuery cleanup.** `MagicItemTab.init()`'s fourth parameter is named `document` (the Foundry item document), which shadowed the global `window.document`. 5.0.0 swapped `$()` element construction for `document.createElement(...)`, so those calls resolved to the item document — which has no `.createElement` — and threw `TypeError`, aborting tab injection before the tab was ever added. Renamed the shadowing identifier to `doc` in `MagicItemTab.bind()`, `init()`, and `isAcceptedItemType()` so the `createElement` calls resolve to the global. Smoke-tested live on Foundry 13.351 + dnd5e 5.3.2.

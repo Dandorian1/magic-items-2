@@ -22,6 +22,15 @@ export class OwnedMagicItem extends MagicItem {
     this.isDestroyed = false;
     this.uses = parseInt("uses" in flagsData ? flagsData.uses : this.charges);
 
+    // Internal-charges mode: the live charge store is the dnd5e item's
+    // `system.uses`, not the magicitems flags (which stay 0 in this mode).
+    // Snapshot from there so the sheet section, Argon, and consume math all
+    // read real values. Rebuilt on every actor/item update, so it stays current.
+    if (this.internal && this.hasSystemUses()) {
+      this.charges = this.getSystemUsesMax();
+      this.uses = this.getSystemUsesValue();
+    }
+
     this.rechargeableLabel = this.rechargeable
       ? `(${game.i18n.localize("MAGICITEMS.SheetRecharge")}: ${this.rechargeText} ${
           MagicItemHelpers.localized(MAGICITEMS.rechargeUnits)[this.rechargeUnit]
@@ -91,19 +100,28 @@ export class OwnedMagicItem extends MagicItem {
       const usage = Math.max(this.getSystemUsesValue() - consumption, 0);
       await this.updateSystemUsesValue(usage);
       this.uses = usage;
+      await this.checkDestroyOnEmpty();
     } else if (this.uses) {
       this.uses = Math.max(this.uses - consumption, 0);
-      // `system.uses` is absent on items without per-item charges (e.g. some
-      // feats); optional-chain so the destroy path still runs in that case.
-      if (!this.item.system.uses?.autoDestroy) {
-        if (await this.destroyed()) {
-          if (this.destroyType === MAGICITEMS.DESTROY_JUST_DESTROY) {
-            this.isDestroyed = true;
-            await this.destroyItem();
-          } else {
-            this.toggleEnabled(false);
-          }
-        }
+      await this.checkDestroyOnEmpty();
+    }
+  }
+
+  /**
+   * Run the destroy-on-0-charges check. Shared by both consume() branches so
+   * system-uses-backed items (e.g. the SRD Staff of Healing) get the check too.
+   * @returns {Promise<void>}
+   */
+  async checkDestroyOnEmpty() {
+    // `system.uses` is absent on items without per-item charges (e.g. some
+    // feats); optional-chain so the destroy path still runs in that case.
+    if (this.item.system.uses?.autoDestroy) return;
+    if (await this.destroyed()) {
+      if (this.destroyType === MAGICITEMS.DESTROY_JUST_DESTROY) {
+        this.isDestroyed = true;
+        await this.destroyItem();
+      } else {
+        this.toggleEnabled(false);
       }
     }
   }
