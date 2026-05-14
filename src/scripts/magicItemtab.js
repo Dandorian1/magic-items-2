@@ -8,14 +8,14 @@ const magicItemTabs = [];
 
 export class MagicItemTab {
   static bind(app, html, item) {
-    const document = app.item ?? app.document ?? item?.document ?? item?.item;
-    if (MagicItemTab.isAcceptedItemType(document)) {
+    const doc = app.item ?? app.document ?? item?.document ?? item?.item;
+    if (MagicItemTab.isAcceptedItemType(doc)) {
       let tab = magicItemTabs[app.id];
       if (!tab) {
         tab = new MagicItemTab(app);
         magicItemTabs[app.id] = tab;
       }
-      tab.init(MagicItemHelpers.normalizeHtml(html), item, app, document);
+      tab.init(MagicItemHelpers.normalizeHtml(html), item, app, doc);
     }
   }
 
@@ -23,8 +23,8 @@ export class MagicItemTab {
     this.activate = false;
   }
 
-  init(html, data, app, document) {
-    this.item = document ?? app.item ?? app.document;
+  init(html, data, app, doc) {
+    this.item = doc ?? app.item ?? app.document;
     this.html = this.getSheetRoot(html);
     this.editable = data?.editable ?? app.isEditable ?? this.item?.isOwner;
 
@@ -387,8 +387,8 @@ export class MagicItemTab {
     return ["weapon", "equipment", "consumable", "tool", "backpack", "feat"];
   }
 
-  static isAcceptedItemType(document) {
-    return MagicItemTab.acceptedItemTypes.includes(document?.type);
+  static isAcceptedItemType(doc) {
+    return MagicItemTab.acceptedItemTypes.includes(doc?.type);
   }
 
   static isAllowedToShow() {

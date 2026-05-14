@@ -1,3 +1,7 @@
+### 5.0.1
+#### Bug fix
+* **Magic Item tab missing on every item sheet — regression from 5.0.0's D4 jQuery cleanup.** `MagicItemTab.init()`'s fourth parameter is named `document` (the Foundry item document), which shadowed the global `window.document`. 5.0.0 swapped `$()` element construction for `document.createElement(...)`, so those calls resolved to the item document — which has no `.createElement` — and threw `TypeError`, aborting tab injection before the tab was ever added. Renamed the shadowing identifier to `doc` in `MagicItemTab.bind()`, `init()`, and `isAcceptedItemType()` so the `createElement` calls resolve to the global. Smoke-tested live on Foundry 13.351 + dnd5e 5.3.2.
+
 ### 5.0.0
 #### Tech-debt phase 5 — long-tail cleanup
 No end-user runtime changes. The major-version bump reflects breaking changes on the **contributor / development surface** (dep majors, lint config format) — Foundry installs are unaffected. Smoke-tested live on Foundry 13.351 + dnd5e 5.3.3 + midi-qol + chris-premades + Argon.
