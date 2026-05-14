@@ -1,3 +1,9 @@
+### 5.0.3
+#### Bug fix — `updateInternalCharges()` dnd5e 5.x `system.uses` schema
+Completes the 5.0.2 internal-charges fix. `MagicItem.updateInternalCharges()` — called by `module.js`'s second `updateItem` hook on *every* update to an internal-charges item, then persisted to the flags via `update()` — read the pre-5.x `system.uses.per` field (gone in dnd5e 5.x), always hit its else branch, and wrote `charges: 0, uses: 0` back to the flags. That clobbered the 5.0.2 constructor snapshot on every update. Rewrote it for the dnd5e 5.x schema: `max` resolves to a number, `value` is a derived getter (`max - spent`), and `recovery` is an array of `{period, type, formula}`. `chargesTypeCompatible()` likewise rewritten to read a 5.x recovery profile. Internal-charges magic items now show their real charge count in the dnd5e inventory, the magicitems sheet section, and the Argon HUD consistently.
+
+Smoke-tested live on Foundry 13.351 + dnd5e 5.3.2.
+
 ### 5.0.2
 #### Bug fixes — dnd5e 5.x `system.uses` alignment
 The 5.0.0 audit covered dnd5e 5.x's *spell* schema changes (D1–D4) but missed its **`system.uses` schema** changes. Three bugs traced to that gap:
