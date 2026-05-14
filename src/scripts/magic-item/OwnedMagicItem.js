@@ -7,6 +7,7 @@ import { OwnedMagicItemFeat } from "../magic-item-owned-entry/OwnedMagicItemFeat
 import { OwnedMagicItemSpell } from "../magic-item-owned-entry/OwnedMagicItemSpell.js";
 import { OwnedMagicItemTable } from "../magic-item-owned-entry/OwnedMagicItemTable.js";
 import { MagicItem } from "./MagicItem.js";
+import { RollImpl, ChatMessageImpl } from "../lib/foundry-compat.js";
 
 export class OwnedMagicItem extends MagicItem {
   constructor(item, actor, magicItemActor, flagsData) {
@@ -144,9 +145,9 @@ export class OwnedMagicItem extends MagicItem {
       destroyDC: this.destroyDC,
     });
     if (destroyed) {
-      ChatMessage.create({
+      ChatMessageImpl.create({
         user: game.user.id,
-        speaker: ChatMessage.getSpeaker({ actor: this.actor }),
+        speaker: ChatMessageImpl.getSpeaker({ actor: this.actor }),
         content: this.formatMessage(`<b>${this.name}</b> ${this.destroyFlavorText}`),
       });
     }
@@ -190,7 +191,7 @@ export class OwnedMagicItem extends MagicItem {
         msg += `<b>${prefix}</b>: ${this.recharge} ${postfix}`;
       }
       if (this.rechargeType === MAGICITEMS.FORMULA_RECHARGE) {
-        let r = new Roll(this.recharge);
+        let r = new RollImpl(this.recharge);
         await r.evaluate();
         amount = r.total;
         msg += `<b>${prefix}</b>: ${r.result} = ${r.total} ${postfix}`;
@@ -224,7 +225,7 @@ export class OwnedMagicItem extends MagicItem {
           }
         });
       }
-      ChatMessage.create({
+      ChatMessageImpl.create({
         speaker: { actor: this.actor },
         content: this.formatMessage(msg),
       });

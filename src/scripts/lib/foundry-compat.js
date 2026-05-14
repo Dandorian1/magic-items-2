@@ -33,6 +33,12 @@ export const TextEditorImpl =
 export const CompendiumCollectionClass =
   foundry.documents?.collections?.CompendiumCollection ?? globalThis.CompendiumCollection;
 
+/** System-aware Roll class (dnd5e overrides via CONFIG.Dice.rolls[0]). */
+export const RollImpl = globalThis.CONFIG?.Dice?.rolls?.[0] ?? globalThis.Roll;
+
+/** System-aware ChatMessage document class (dnd5e overrides for card-render hooks). */
+export const ChatMessageImpl = globalThis.CONFIG?.ChatMessage?.documentClass ?? globalThis.ChatMessage;
+
 /** DialogV2 helper — convenience wrapper around the wait-style API used by
  * the simple yes/no flows in this module. Resolves to the action string the
  * clicked button returned, or `null` if the dialog was dismissed.

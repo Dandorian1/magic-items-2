@@ -1,6 +1,7 @@
 import CONSTANTS from "./constants/constants.js";
 import Logger from "./lib/Logger.js";
 import { isRealNumber, isEmptyObject } from "./lib/lib.js";
+import { RollImpl, ChatMessageImpl } from "./lib/foundry-compat.js";
 
 export class MagicItemHelpers {
   static isUsingNew5eSheet(sheet) {
@@ -38,7 +39,7 @@ export class MagicItemHelpers {
    */
   static async rollDestroyCheck({ name, actor, destroyCheck, destroyDC }) {
     if (destroyCheck !== "d2" && destroyCheck !== "d3") return true;
-    const r = new Roll("1d20");
+    const r = new RollImpl("1d20");
     await r.evaluate();
     const destroyed = destroyCheck === "d2" ? r.total === 1 : r.total <= destroyDC;
     const verdict = destroyed
@@ -46,7 +47,7 @@ export class MagicItemHelpers {
       : game.i18n.localize("MAGICITEMS.MagicItemDestroyCheckSuccess");
     await r.toMessage({
       flavor: `<b>${name}</b> ${game.i18n.localize("MAGICITEMS.MagicItemDestroyCheck")} - ${verdict}`,
-      speaker: ChatMessage.getSpeaker({ actor, token: actor?.token }),
+      speaker: ChatMessageImpl.getSpeaker({ actor, token: actor?.token }),
     });
     return destroyed;
   }

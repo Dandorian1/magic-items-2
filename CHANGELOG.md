@@ -1,3 +1,62 @@
+### 5.0.0
+#### Tech-debt phase 5 — long-tail cleanup
+No end-user runtime changes. The major-version bump reflects breaking changes on the **contributor / development surface** (dep majors, lint config format) — Foundry installs are unaffected. Smoke-tested live on Foundry 13.351 + dnd5e 5.3.3 + midi-qol + chris-premades + Argon.
+
+#### Code cleanup
+* **C5 — Roll / ChatMessage namespaced.** Bare `new Roll(...)` and `ChatMessage.create(...)` calls now route through `RollImpl` / `ChatMessageImpl` constants exported from `src/scripts/lib/foundry-compat.js`. The constants resolve to `CONFIG.Dice.rolls[0]` and `CONFIG.ChatMessage.documentClass` respectively (with bare-global fallback for pre-`ready` code paths). dnd5e's ChatMessage5e has card-render hooks midi-qol expects; routing through CONFIG keeps system overrides intact. 5 call sites updated.
+* **D4 partial — jQuery surface minimized.** `MagicItem.sheetEditable` rewrites `$(form).hasClass(...)` to `form.classList.contains(...)`. `MagicItemTab.init()` builds the tab link and content panel via `document.createElement` instead of `$()` string-HTML construction. Remaining jQuery is the `normalizeHtml` bridge for v1 sheet hooks and the `.find()` chains on the bridged jQuery — those stay until Foundry v14 drops v1 sheets entirely.
+* **C3 (deferred from 4.3.1) re-checked:** the `magic-items-2.` pack-id retro-compat shim was already removed; no action needed.
+
+#### Documentation
+* **A3 — pack migration recipe.** New `docs/pack-migration.md`: step-by-step recipe for re-saving the bundled compendium packs through a new dnd5e schema (open in test world → close to trigger Foundry's data prep → `npm run build:json` → `npm run build:clean` → diff-review → commit).
+* **A4 — Argon API watch-list.** New "Watch list" section in `CONTRIBUTING.md` tracks upstream changes worth migrating to when they land: Argon's eventual public API, v14's deprecation of v1 sheet hooks, v15's removal of the `Handlebars` global.
+
+#### Dep-major upgrade (D3, full scope)
+Pre-upgrade `npm install` reported 16 vulnerabilities (1 low, 13 moderate, 2 high). Bumped:
+
+| Dep | Before | After | Notes |
+|---|---|---|---|
+| `eslint` | 8.57 | **9.10** | **Flat config migration** — see below. |
+| `@typescript-eslint/eslint-plugin` | 7.1 | — | Replaced by unified `typescript-eslint` 8.6 package. |
+| `eslint-config-prettier` | 9.1 | 10.0 | Flat-config-native. |
+| `eslint-plugin-jsdoc` | 46.10 | 50.2 | Flat-config-native. |
+| `eslint-plugin-prettier` | 5.1 | 5.2 | |
+| `vite` | 4.5 | **6.0** | |
+| `vite-plugin-static-copy` | 0.17 | 2.0 | |
+| `rollup` | 3.29 | 4.21 | Via vite; we don't use rollup directly. |
+| `prettier` | 3.2 | 3.6 | |
+| `husky` | 8.0 | 9.1 | `.husky/pre-commit` simplified — dropped the `_/husky.sh` boilerplate. |
+| `lint-staged` | 13.3 | 15.2 | |
+
+**Removed (unused after Phase 1's audit confirmed no source consumers):**
+- `@babel/eslint-parser` (espree handles ES2022 natively)
+- `@typhonjs-config/eslint-config`, `@typhonjs-fvtt/eslint-config-foundry.js` (not used by the flat config)
+- `svelte`, `svelte-dnd-action`, `svelte-preprocess`, `@sveltejs/vite-plugin-svelte` (no `.svelte` files in src/)
+- `vite-plugin-clean` (redundant with `utils/clean.mjs`)
+- `vite-plugin-run` (replaced by `sass` step in npm scripts)
+
+**Added (for flat-config support):**
+- `globals` 15.x (centralized globals registry used by `eslint.config.js`)
+- `typescript-eslint` 8.x (unified plugin + parser package)
+
+#### ESLint 9 flat config migration
+* `.eslintrc.json` and `.eslintignore` deleted.
+* New `eslint.config.js` at the repo root:
+  - Imports `@eslint/js`, `typescript-eslint`, `eslint-plugin-jsdoc`, `eslint-plugin-prettier`, `eslint-config-prettier`.
+  - Uses the `globals` package for browser/node/jquery globals plus the module's Foundry globals list.
+  - One `files: ["src/**/*.js", "tests/**/*.js"]` block with shared rules.
+  - One `files: ["tests/**/*.js"]` block with relaxed rules for vitest test code.
+  - One top-level `ignores` block replaces `.eslintignore`.
+* npm scripts: `eslint --ext .js ./src ./tests` → `eslint src tests` (flat config doesn't need `--ext`).
+
+#### Vite 6 plugin overhaul
+* `vite.config.mjs`: dropped the Svelte plugin (no `.svelte` files), `vite-plugin-run` (replaced by `npm run build:sass` step), `vite-plugin-clean` (redundant with `utils/clean.mjs`).
+* Trimmed `viteStaticCopy` targets to the directories that actually exist under `src/` — `vite-plugin-static-copy` 2.x errors on empty patterns, where 0.17 silently no-op'd.
+* New `build:sass` npm script chained into `build` / `build:watch` / `build:watchWithDb`.
+
+#### Husky 9
+* `.husky/pre-commit` simplified from the 4-line v8 layout (with `_/husky.sh` source) to just the command (`npx lint-staged`). The husky 9 install hook handles the rest.
+
 ### 4.5.0
 #### Tech-debt phase 4 — automated test harness
 

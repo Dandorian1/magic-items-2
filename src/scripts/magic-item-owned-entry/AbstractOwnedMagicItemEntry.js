@@ -1,7 +1,7 @@
 import CONSTANTS from "../constants/constants.js";
 import Logger from "../lib/Logger.js";
 import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
-import { renderTemplate as renderTemplateV2 } from "../lib/foundry-compat.js";
+import { renderTemplate as renderTemplateV2, ChatMessageImpl } from "../lib/foundry-compat.js";
 import { MagicItemHelpers } from "../magic-item-helpers.js";
 
 export class AbstractOwnedMagicItemEntry {
@@ -87,9 +87,9 @@ export class AbstractOwnedMagicItemEntry {
       destroyDC: this.destroyDC,
     });
     if (destroyed) {
-      ChatMessage.create({
+      ChatMessageImpl.create({
         user: game.user.id,
-        speaker: ChatMessage.getSpeaker({ actor: this.magicItem.actor }),
+        speaker: ChatMessageImpl.getSpeaker({ actor: this.magicItem.actor }),
         content: this.magicItem.formatMessage(`<b>${this.name}</b> ${this.magicItem.destroyFlavorText}`),
       });
     }
@@ -208,9 +208,9 @@ export class AbstractOwnedMagicItemEntry {
       const maxCharges = parseInt("uses" in this.item ? this.item.uses : this.magicItem.charges);
       Logger.debug(`Charges: ${charges}, MaxCharges: ${maxCharges}`);
       if (charges !== 0) {
-        ChatMessage.create({
+        ChatMessageImpl.create({
           user: game.user.id,
-          speaker: ChatMessage.getSpeaker({ actor: this.magicItem.actor, token: this.magicItem.actor.token }),
+          speaker: ChatMessageImpl.getSpeaker({ actor: this.magicItem.actor, token: this.magicItem.actor.token }),
           content: game.i18n.format(game.i18n.localize("MAGICITEMS.ShowChargesMessage"), {
             name: this.magicItem.name,
             chargesLeft: charges,

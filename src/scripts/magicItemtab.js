@@ -33,15 +33,28 @@ export class MagicItemTab {
       return; // Already initialized, duplication bug!
     }
 
-    const tabLink = tabs.hasClass("sheet-tabs")
-      ? $(`<a data-action="tab" data-group="primary" data-tab="${CONSTANTS.MODULE_ID}"><span>Magic Item</span></a>`)
-      : $(`<a class="item" data-tab="${CONSTANTS.MODULE_ID}">Magic Item</a>`);
-    tabs.append(tabLink);
-    tabLink.on("click", () => {
+    const tabLink = document.createElement("a");
+    if (tabs.hasClass("sheet-tabs")) {
+      tabLink.dataset.action = "tab";
+      tabLink.dataset.group = "primary";
+      tabLink.dataset.tab = CONSTANTS.MODULE_ID;
+      const span = document.createElement("span");
+      span.textContent = "Magic Item";
+      tabLink.appendChild(span);
+    } else {
+      tabLink.className = "item";
+      tabLink.dataset.tab = CONSTANTS.MODULE_ID;
+      tabLink.textContent = "Magic Item";
+    }
+    tabs.append(tabLink); // jQuery .append accepts native HTMLElement
+    tabLink.addEventListener("click", () => {
       window.setTimeout(() => this.adjustSheetSize(app), 0);
     });
 
-    const tabContent = $(`<div class="tab magicitems" data-group="primary" data-tab="${CONSTANTS.MODULE_ID}"></div>`);
+    const tabContent = document.createElement("div");
+    tabContent.className = "tab magicitems";
+    tabContent.dataset.group = "primary";
+    tabContent.dataset.tab = CONSTANTS.MODULE_ID;
     const body = this.html.find(".sheet-body, .window-content, form").first();
     body.append(tabContent);
 

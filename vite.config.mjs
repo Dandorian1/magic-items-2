@@ -1,12 +1,8 @@
-import { svelte } from "@sveltejs/vite-plugin-svelte";
 import resolve from "@rollup/plugin-node-resolve"; // This resolves NPM modules from node_modules.
-import preprocess from "svelte-preprocess";
 import { postcssConfig, terserConfig, typhonjsRuntime } from "@typhonjs-fvtt/runtime/rollup";
 import { viteStaticCopy } from "vite-plugin-static-copy";
-import cleanPlugin from "vite-plugin-clean";
 import { normalizePath } from "vite";
 import path from "path";
-import { run } from "vite-plugin-run";
 
 // ATTENTION!
 // Please modify the below variables: s_PACKAGE_ID and s_SVELTE_HASH_ID appropriately.
@@ -112,33 +108,13 @@ export default () => {
     },
 
     plugins: [
-      run([
-        {
-          name: "run sass",
-          run: ["sass", `src/styles:dist/${s_MODULE_ID}/styles`],
-        },
-      ]),
       viteStaticCopy({
+        // vite-plugin-static-copy 2.x errors when src matches no files;
+        // only the directories that actually exist in src/ are listed.
         targets: [
           {
-            src: normalizePath(path.resolve(__dirname, "./src/assets")) + "/[!.]*", // 1️
-            dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/assets`)), // 2️
-          },
-          {
-            src: normalizePath(path.resolve(__dirname, "./src/images")) + "/[!.]*", // 1️
-            dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/images`)), // 2️
-          },
-          {
-            src: normalizePath(path.resolve(__dirname, "./src/icons")) + "/[!.]*", // 1️
-            dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/icons`)), // 2️
-          },
-          {
-            src: normalizePath(path.resolve(__dirname, "./src/templates")) + "/[!.]*", // 1️
-            dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/templates`)), // 2️
-          },
-          {
-            src: normalizePath(path.resolve(__dirname, "./src/lang")) + "/[!.]*",
-            dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/lang`)),
+            src: normalizePath(path.resolve(__dirname, "./src/templates")) + "/[!.]*",
+            dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/templates`)),
           },
           {
             src: normalizePath(path.resolve(__dirname, "./src/languages")) + "/[!.]*",
@@ -149,46 +125,19 @@ export default () => {
             dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/styles`)),
           },
           {
-            src: normalizePath(path.resolve(__dirname, "./src/packs")) + '/[!.^(_?.*)]*', // + '/[!.^(_source)]*',
+            src: normalizePath(path.resolve(__dirname, "./src/packs")) + "/[!.^(_?.*)]*",
             dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/packs`)),
           },
           {
             src: normalizePath(path.resolve(__dirname, "./src/module.json")),
             dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/`)),
           },
-          {
-            src: normalizePath(path.resolve(__dirname, "./src/scripts/libs")) + "/[!.]*",
-            dest: normalizePath(path.resolve(__dirname, `./dist/${s_MODULE_ID}/scripts/libs`)),
-          },
         ],
       }),
-      svelte({
-        compilerOptions: {
-          // Provides a custom hash adding the string defined in `s_SVELTE_HASH_ID` to scoped Svelte styles;
-          // This is reasonable to do as the framework styles in TRL compiled across `n` different packages will
-          // be the same. Slightly modifying the hash ensures that your package has uniquely scoped styles for all
-          // TRL components and makes it easier to review styles in the browser debugger.
-          cssHash: ({ hash, css }) => `svelte-${s_SVELTE_HASH_ID}-${hash(css)}`,
-        },
-        preprocess: preprocess(),
-        onwarn: (warning, handler) => {
-          // Suppress `a11y-missing-attribute` for missing href in <a> links.
-          // Foundry doesn't follow accessibility rules.
-          if (warning.message.includes(`<a> element should have an href attribute`)) {
-            return;
-          }
-
-          // Let Rollup handle all other warnings normally.
-          handler(warning);
-        },
-      }),
-
       resolve(s_RESOLVE_CONFIG), // Necessary when bundling npm-linked packages.
 
       // When s_TYPHONJS_MODULE_LIB is true transpile against the Foundry module version of TRL.
       s_TYPHONJS_MODULE_LIB && typhonjsRuntime(),
-
-      cleanPlugin(),
     ],
   };
 };

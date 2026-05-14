@@ -341,7 +341,7 @@ export class MagicItem {
   }
 
   get sheetEditable() {
-    return $(this.actor.sheet.form).hasClass("editable");
+    return this.actor.sheet?.form?.classList?.contains("editable") ?? false;
   }
 
   async renderSheet(itemId) {

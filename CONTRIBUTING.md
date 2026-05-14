@@ -189,6 +189,32 @@ https://github.com/<owner>/magic-items-2/releases/download/<tag>/module.json
 When the prerelease passes the smoke-test cycle, tag a final release
 without the `-test.N` suffix to trigger the foundryvtt.com publish.
 
+## Watch list
+
+Things to migrate to when upstream changes land:
+
+- **Argon (enhancedcombathud-dnd5e) public API.** Our integration in
+  `src/scripts/integrations/argon.js` uses libWrapper + the
+  `render<ConstructorName>ArgonComponent` render hooks to capture
+  Argon's closure-private classes. If Argon ships a stable public
+  `api` (e.g. `enhancedcombathud.api.registerSpellGroup`),
+  migrate to it for cleaner version-compat.
+- **v1 sheet hooks (`renderItemSheet5e`, `renderActorSheet5eCharacter`,
+  `renderActorSheet5eNPC`).** Foundry v14 may drop these. When it
+  does, the v1 sheet decorator in `magicItemtab.js` + `magicitemsheet.js`
+  can go too, plus the jQuery shim in `magic-item-helpers.js`. Track
+  v14 release notes.
+- **`Handlebars` global.** Foundry v14 introduces
+  `foundry.applications.handlebars.registerHelper`. Our
+  `_hbRegister` shim in `module.js` already prefers the namespaced
+  path; when v15 removes the global, drop the fallback.
+
+## Pack migration
+
+See [`docs/pack-migration.md`](docs/pack-migration.md) for the recipe
+to migrate the bundled compendium packs when dnd5e ships a schema
+change.
+
 ## Style
 
 - Prettier + ESLint configs are checked in (`.prettierrc.json`,
