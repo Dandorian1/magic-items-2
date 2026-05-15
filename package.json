@@ -2,7 +2,7 @@
   "name": "magicitems",
   "title": "Magic Items",
   "description": "Module that adds the ability to create magical items with spells or feats that belong to the item itself, such as staffs or magic wands, which will be automatically inherited from the character who owns the item.",
-  "version": "5.0.19",
+  "version": "5.0.22",
   "main": "module.js",
   "license": "SEE LICENSE IN LICENSE",
   "private": true,
