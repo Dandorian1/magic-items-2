@@ -287,7 +287,6 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
     }
 
     const proceed = async () => {
-      console.log(`[magicitems] proceed() starting cast of ${this.item?.name} on ${this.magicItem?.actor?.name}`);
       const sourceItem = await this.item.entity();
       if (!sourceItem) {
         Logger.warn(`magicitems: source spell for ${this.item.name} not found`, true);

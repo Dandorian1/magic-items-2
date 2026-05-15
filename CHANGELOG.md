@@ -1,3 +1,11 @@
+### 5.0.14
+#### Bug fix — also stub component render() during cast to catch ApplicationV2 auto-rerender
+5.0.10's pause (`_actor = null`) successfully suppressed Argon's hook-driven re-renders — that's why the main HUD bar stopped flashing. The spell accordion strip kept flashing because **Argon's accordion categories and item buttons are ApplicationV2 sub-components that subscribe to their underlying documents directly**: when a subscribed document updates (the staff's charge consume, the transient spell's flag write, etc.), Foundry automatically re-renders the subscribed Application *outside* of the Foundry hook chain. The `_actor` check doesn't apply to that path because the per-Application document-subscription is checked at the Document level, not against Argon's active actor.
+
+`pauseArgon()` now also iterates `argon.accordionPanelCategories`, `argon.itemButtons`, `argon.components.main`, and `argon.components.portrait`, and stubs each one's `render()` method with a no-op for the duration of the cast. `resume()` restores them. Any render trigger from any path (Foundry hook, ApplicationV2 doc-subscription, direct call) is suppressed during the cast cycle. Resume restores the originals; the next natural updateItem/updateActor will fire normally and bring pip counts current.
+
+Also removed the 5.0.13 diagnostic `console.log` instrumentation — its purpose (proving the hook-pause path worked) is satisfied; that ground is settled.
+
 ### 5.0.13
 #### Diagnostic build — instrument Argon hook handlers to find the flash source
 After 5.0.11/5.0.12, casting still produces a full-panel flash even though `_actor` is being nulled and no catch-up render runs. Either the `_actor = null` write isn't sticking, or there's a render path I haven't accounted for. To diagnose: `console.log` lines at `proceed()` start, `pauseArgon`, and `resumeArgon` (so we know the cast path runs through our code), plus a wrap of Argon's `_onCreateItem` / `_onUpdateItem` / `_onDeleteItem` / `_onUpdateActor` that logs each call with `parent`, `this._actor`, `matches`, `paused`, and `willRun`. The next cast will print the full trace — if anything logs `willRun=true` while paused, that's our culprit. Will be removed once root-caused.

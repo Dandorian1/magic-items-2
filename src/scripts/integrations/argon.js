@@ -517,34 +517,28 @@ export function pauseArgon() {
   const argon = ui?.ARGON;
   if (!argon) return () => {};
   if (_argonPaused) return () => {}; // already paused; later caller's resume is a no-op
-  _argonPaused = { actor: argon._actor };
+  // Collect every Argon sub-component that has a render() — accordion
+  // categories AND item buttons — and stub each one out for the duration
+  // of the cast. This catches the ApplicationV2 per-document app
+  // subscription path (auto-render when subscribed document mutates),
+  // which `_actor = null` alone doesn't suppress. Without this, an update
+  // to the staff (or any actor item) during cast triggers the accordion
+  // sub-components to re-render directly, bypassing Argon's main hooks.
+  const stubbed = [];
+  const stubRender = (obj) => {
+    if (!obj || typeof obj.render !== "function") return;
+    const orig = obj.render;
+    obj.render = () => undefined;
+    stubbed.push({ obj, orig });
+  };
+  for (const cat of argon.accordionPanelCategories ?? []) stubRender(cat);
+  for (const btn of argon.itemButtons ?? []) stubRender(btn);
+  for (const cmp of argon.components?.main ?? []) stubRender(cmp);
+  if (argon.components?.portrait) stubRender(argon.components.portrait);
+
+  _argonPaused = { actor: argon._actor, stubbed };
   setOrDefine(argon, "_actor", null);
-  console.log(
-    `[magicitems] pauseArgon: _actor was=${_argonPaused.actor?.name ?? "(none)"}, now=${argon._actor}, ARGON.rendered=${argon.rendered}`,
-  );
-  // Instrument Argon's panel-refresh entry points so we can see what's
-  // actually firing during a cast. The hook handlers should all
-  // short-circuit while `_actor` is null — if any of them log a
-  // "matches=true" line while paused, we've missed a code path.
-  if (!argon.__miInstrumented) {
-    argon.__miInstrumented = true;
-    for (const m of ["_onCreateItem", "_onUpdateItem", "_onDeleteItem", "_onUpdateActor"]) {
-      const orig = argon[m];
-      if (typeof orig !== "function") continue;
-      argon[m] = function (e) {
-        const target = m === "_onUpdateActor" ? e : e?.parent;
-        const matches = target === this._actor;
-        const fired = matches && this._actor !== null;
-        if (fired || _argonPaused) {
-          console.log(
-            `[magicitems] Argon.${m}: e=${e?.name ?? e?.constructor?.name}, parent=${e?.parent?.name}, this._actor=${this._actor?.name ?? "(null)"}, matches=${matches}, paused=${!!_argonPaused}, willRun=${fired}`,
-          );
-        }
-        return orig.call(this, e);
-      };
-    }
-    console.log("[magicitems] instrumented Argon hook handlers");
-  }
+
   let released = false;
   return function resume() {
     if (released || !_argonPaused) return;
@@ -552,12 +546,12 @@ export function pauseArgon() {
     const saved = _argonPaused;
     _argonPaused = null;
     setOrDefine(argon, "_actor", saved.actor);
-    console.log(`[magicitems] resumeArgon: restored _actor to ${argon._actor?.name}`);
-    // No catch-up render — every render method on the panel
-    // (`argon.refresh`, accordion `setUses`, full button iteration) ends up
-    // re-rendering the entire spell panel, which is the visible flash.
-    // The next natural updateItem / updateActor will fire Argon's normal
-    // hooks and bring pip counts current. Brief staleness > guaranteed flash.
+    // Restore render methods. Items may have been mutated underneath,
+    // but the next natural updateItem / updateActor will fire Argon's
+    // hooks and bring pip counts current. Brief staleness > flash.
+    for (const { obj, orig } of saved.stubbed) {
+      obj.render = orig;
+    }
   };
 }
 
