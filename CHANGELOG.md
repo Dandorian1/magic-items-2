@@ -1,3 +1,12 @@
+### 5.0.5
+#### Refactor — Phase 1 of post-5.0.4 cleanup
+Zero-risk dead-code removal and an inert-option fix from a structural code review. No runtime behavior change.
+
+* **`RetrieveHelpers` — dropped 17 unused methods.** Of the 22 static methods in `src/scripts/lib/retrieve-helpers.js`, only `retrieveUuid`, `stringIsUuid`, `getItemAsync`, `getActorAsync`, and `getCompendiumCollectionSync` (used internally by `retrieveUuid`) had callers anywhere in `src/`. The other 17 — `getCompendiumCollectionAsync`, `getUserSync`, `getActorSync`, `getJournalSync/Async`, `getMacroSync/Async`, `getSceneSync/Async`, `getItemSync`, `getPlaylistSoundPathSync/Async`, `getTokenSync`, `getRollTableSync/Async`, `getUuid`, `getDocument` — were never called (some dead transitively: `getDocument` was only invoked by `getUuid`, both now gone). `RetrieveHelpers` isn't on the public module API, so deletion is safe. ~770-line drop.
+* **`AbstractMagicItemEntry.renderSheet()` and `magicitemsheet.js:257` — dropped the inert `editable` from `render()`.** `editable` isn't a key in v13's `ApplicationRenderOptions` (`{ force, isFirstRender, parts, position, tab, window }`) — it's a `DocumentSheet` *construction* option, not a render option. Passing it as `render({ force: true, editable: entity.isOwner })` was a no-op. Foundry's own permission gating gives non-owners a read-only sheet without us doing anything. Now just `render({ force: true })`.
+
+Verified: `npm run lint` clean, full vitest suite green, `vite build` + bundle-parse check pass.
+
 ### 5.0.4
 #### Cleanup & hardening — code-review findings
 A focused cleanup patch from a top-down code review. No end-user runtime behavior changes apart from the two latent-bug fixes below — the rest is correctness hardening, dead-code removal, and dev-surface tidy-up.
