@@ -519,6 +519,7 @@ export function pauseArgon() {
   if (_argonPaused) return () => {}; // already paused; later caller's resume is a no-op
   _argonPaused = { actor: argon._actor };
   setOrDefine(argon, "_actor", null);
+  Logger.debug(`magicitems: pauseArgon — _actor was ${_argonPaused.actor?.name}, now ${argon._actor}`);
   let released = false;
   return function resume() {
     if (released || !_argonPaused) return;
@@ -526,17 +527,13 @@ export function pauseArgon() {
     const saved = _argonPaused;
     _argonPaused = null;
     setOrDefine(argon, "_actor", saved.actor);
-    // Targeted catch-up — don't `argon.refresh()`, which would re-render
-    // every itemButton on the HUD in one pass (visible as a spell-icon
-    // flash). The state we actually need to reflect post-cast is just the
-    // accordion pip counts (charges) and the portrait's action tracker.
-    try {
-      const cats = saved.actor ? saved.actor.apps && argon.accordionPanelCategories : argon.accordionPanelCategories;
-      cats?.forEach?.((c) => c.setUses?.());
-      argon.components?.portrait?.refresh?.();
-    } catch (e) {
-      Logger.warn(`Argon catch-up refresh failed: ${e?.message}`, false, e);
-    }
+    Logger.debug(`magicitems: resumeArgon — _actor restored to ${argon._actor?.name}`);
+    // No catch-up render — every render method on the panel
+    // (`argon.refresh`, accordion `setUses`, full button iteration) ends up
+    // re-rendering the entire spell panel, which is the visible flash.
+    // The next natural updateItem / updateActor (next cast, next rest,
+    // next anything) will fire Argon's normal hooks and bring pip counts
+    // current. Brief staleness is preferable to a guaranteed flash.
   };
 }
 

@@ -1,3 +1,11 @@
+### 5.0.12
+#### Bug fix — spell panel still flashed on cast (every catch-up path was heavy)
+5.0.11 swapped the bulk `argon.refresh()` for what I thought was a targeted catch-up: `accordionPanelCategories.forEach(c => c.setUses())` + `portrait.refresh()`. **It wasn't targeted enough.** `setUses()` iterates every spell-slot category (Staff of Healing accordion, Innate Spellcasting, Cantrip, 1st-5th Level slots) and re-renders each one's pip strip + spell-icon grid — that's the full-panel flash users still saw.
+
+Conclusion: every render method exposed by Argon's main panel is a bulk operation. Trying to do *any* explicit catch-up at the end of a cast collapses to a visible flash. So resume() now just restores `_actor` and does nothing else. The next natural `updateItem`/`updateActor`/`updateCombat`/etc. from any other event will fire Argon's normal hooks and pull pip counts current — typically within seconds (next cast, next token movement, next chat message processing an effect). Brief staleness is preferable to a guaranteed flash on every cast.
+
+Also added two `Logger.debug(...)` lines in `pauseArgon`/`resume` so the cast cycle can be traced in the browser console (visible when the magicitems debug setting is enabled).
+
 ### 5.0.11
 #### Bug fix — eliminate the spell-icon flash at end of cast
 5.0.10 fixed the cast-blocking TypeError and the Argon panel-bar blink, but the spell icons themselves still flashed at end of cast. Root cause: `pauseArgon().resume()` was calling `ui.ARGON.refresh()` for the catch-up, which re-renders **every** itemButton on the HUD in a single pass — that's the visible flash. Replaced with a targeted catch-up: `argon.accordionPanelCategories.forEach(c => c.setUses())` (which is what the underlying `_onUpdateActor` does for pip counts) plus `argon.components.portrait.refresh()` (action tracker). No full re-render, so no button flash. The state that actually matters post-cast — charge pips and action tracker — still updates correctly.
