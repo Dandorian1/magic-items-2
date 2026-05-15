@@ -227,11 +227,13 @@ const API = {
    * @returns {Promise<void>} No response
    */
   async execActorShortRest(actor, isNewDay) {
-    let actorTmp = await API.actor(actor);
-    actorTmp.items.forEach(async (item) => {
-      await item.onShortRest();
-      if (isNewDay) await item.onNewDay();
-    });
+    const actorTmp = await API.actor(actor);
+    await Promise.all(
+      actorTmp.items.map(async (item) => {
+        await item.onShortRest();
+        if (isNewDay) await item.onNewDay();
+      }),
+    );
   },
 
   /**
@@ -241,11 +243,13 @@ const API = {
    * @returns {Promise<void>} No response
    */
   async execActorLongRest(actor, isNewDay) {
-    let actorTmp = await API.actor(actor);
-    actorTmp.items.forEach(async (item) => {
-      await item.onLongRest();
-      if (isNewDay) await item.onNewDay();
-    });
+    const actorTmp = await API.actor(actor);
+    await Promise.all(
+      actorTmp.items.map(async (item) => {
+        await item.onLongRest();
+        if (isNewDay) await item.onNewDay();
+      }),
+    );
   },
 };
 

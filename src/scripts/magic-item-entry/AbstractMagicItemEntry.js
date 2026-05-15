@@ -39,54 +39,41 @@ export class AbstractMagicItemEntry {
     entity.sheet.render({ force: true });
   }
 
-  entity() {
-    return new Promise((resolve, reject) => {
-      // Prefer UUID lookup — handles actor-embedded items (Actor.<id>.Item.<id>)
-      // that the pack === "world" branch misses by only reading the world-level
-      // Items collection.
-      const tryUuid = this.uuid ? fromUuid(this.uuid).catch(() => null) : Promise.resolve(null);
-      tryUuid.then((entity) => {
-        if (entity) {
-          resolve(entity);
-          return;
-        }
-        if (this.pack === "world" || !this.pack) {
-          const worldEntity = this.entityCls().collection?.instance?.get(this.id);
-          if (worldEntity) {
-            resolve(worldEntity);
-          } else {
-            Logger.warn(game.i18n.localize("MAGICITEMS.WarnNoMagicItemSpell") + this.name, true);
-            reject();
-          }
-          return;
-        }
-        const pack = game.packs.find((p) => p.collection === this.pack);
-        if (!pack) {
-          Logger.warn(`Cannot retrieve pack for ${this.pack}`, true);
-          reject();
-          return;
-        }
-        pack.getDocument(this.id)?.then((packEntity) => {
-          if (packEntity) {
-            resolve(packEntity);
-          } else {
-            Logger.warn(game.i18n.localize("MAGICITEMS.WarnNoMagicItemSpell") + this.name, true);
-            reject();
-          }
-        });
-      });
-    });
+  // Prefer UUID lookup — handles actor-embedded items (Actor.<id>.Item.<id>)
+  // that the pack === "world" branch misses by only reading the world-level
+  // Items collection. Throws an Error with a real reason on miss, so callers'
+  // catch handlers see something useful instead of an `undefined` rejection.
+  async entity() {
+    if (this.uuid) {
+      const byUuid = await fromUuid(this.uuid).catch(() => null);
+      if (byUuid) return byUuid;
+    }
+
+    if (this.pack === "world" || !this.pack) {
+      const worldEntity = this.entityCls().collection?.instance?.get(this.id);
+      if (worldEntity) return worldEntity;
+      Logger.warn(game.i18n.localize("MAGICITEMS.WarnNoMagicItemSpell") + this.name, true);
+      throw new Error(`MagicItem entry not found in world: ${this.id} (${this.name})`);
+    }
+
+    const pack = game.packs.find((p) => p.collection === this.pack);
+    if (!pack) {
+      Logger.warn(`Cannot retrieve pack for ${this.pack}`, true);
+      throw new Error(`MagicItem entry pack missing: ${this.pack}`);
+    }
+
+    const packEntity = await pack.getDocument(this.id);
+    if (packEntity) return packEntity;
+    Logger.warn(game.i18n.localize("MAGICITEMS.WarnNoMagicItemSpell") + this.name, true);
+    throw new Error(`MagicItem entry not found in pack ${this.pack}: ${this.id} (${this.name})`);
   }
 
   entityCls() {
     return CONFIG.Item;
   }
 
-  data() {
-    return new Promise((resolve) => {
-      this.entity().then((entity) => {
-        resolve(entity.toJSON());
-      });
-    });
+  async data() {
+    const entity = await this.entity();
+    return entity.toJSON();
   }
 }

@@ -1,6 +1,7 @@
 import Logger from "../lib/Logger.js";
 import { MagicItemUpcastDialog } from "../magicitemupcastdialog.js";
 import { AbstractOwnedMagicItemEntry } from "./AbstractOwnedMagicItemEntry.js";
+import { pauseArgon } from "../integrations/argon.js";
 import { MagicItemHelpers } from "../magic-item-helpers.js";
 import { RetrieveHelpers } from "../lib/retrieve-helpers.js";
 import CONSTANTS from "../constants/constants.js";
@@ -143,6 +144,19 @@ function buildSpellData(sourceItem, entry, magicItem) {
     }
   }
 
+  // Blank `activation.type` on every activity so Argon (the Enhanced Combat
+  // HUD) doesn't flicker on every cast. Per Argon's wiki, its visibility
+  // filter is "first activity's `activation.type` ∈ {action, bonus, reaction,
+  // special}" — anything else makes Argon skip the item entirely. Without
+  // this, `createEmbeddedDocuments` triggers an Argon re-render for the new
+  // transient, and `deleteEmbeddedDocuments` triggers another at cleanup,
+  // bracketing every cast with a visible blink. `consume: false` already
+  // suppresses action-economy gating, so blanking activation.type has no
+  // effect on dnd5e's cast workflow.
+  for (const a of iterActivities(data.system)) {
+    if (a?.activation) a.activation.type = "";
+  }
+
   data = foundry.utils.mergeObject(data, {
     "system.preparation": { mode: "magicitems" },
     "flags.core": { sourceId: entry.uuid },
@@ -193,10 +207,13 @@ function midiHasActiveWorkflow(activityUuids) {
  * @param actor
  * @param transient
  */
-function scheduleTransientCleanup(actor, transient) {
+function scheduleTransientCleanup(actor, transient, onCleanup) {
   const actorId = actor?.id;
   const itemId = transient?.id;
-  if (!actorId || !itemId) return;
+  if (!actorId || !itemId) {
+    if (typeof onCleanup === "function") onCleanup();
+    return;
+  }
 
   const activityUuids = new Set();
   try {
@@ -217,6 +234,7 @@ function scheduleTransientCleanup(actor, transient) {
     if (dnd5eHookId) Hooks.off("dnd5e.postUseActivity", dnd5eHookId);
     if (midiHookId) Hooks.off("midi-qol.RollComplete", midiHookId);
     await safeDeleteTransient(game.actors.get(actorId), itemId);
+    if (typeof onCleanup === "function") onCleanup();
   };
 
   const onTimeout = () => {
@@ -276,6 +294,13 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
       }
       const data = buildSpellData(sourceItem, this.item, this.magicItem);
 
+      // Pause Argon's item-hook-driven refreshes for the duration of the
+      // cast — see `pauseArgon` in integrations/argon.js. Resumed (with a
+      // single catch-up `argon.refresh()`) once `scheduleTransientCleanup`
+      // deletes the transient. Idempotent, so the manual error/cancel paths
+      // below can also release it without double-toggling.
+      const unpauseArgon = pauseArgon();
+
       // Materialise the spell as a real actor-embedded Item5e so that
       // midi-qol / chris-premades / dnd5e all see it in `actor.items`.
       // The transient (non-embedded) clone the previous implementation
@@ -288,19 +313,34 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
         transient = Array.isArray(created) ? created[0] : created;
       } catch (e) {
         Logger.error(`magicitems: failed to materialise ${this.item.name}: ${e?.message}`, true, e);
+        unpauseArgon();
         return;
       }
       if (!transient) {
         Logger.warn(`magicitems: materialise returned no item for ${this.item.name}`, true);
+        unpauseArgon();
         return;
       }
       transient.prepareFinalAttributes?.();
 
       // Begin cleanup-on-completion before .use() so we never miss the
       // post-cast hook if it fires synchronously inside `.use()`.
-      scheduleTransientCleanup(actor, transient);
+      scheduleTransientCleanup(actor, transient, unpauseArgon);
 
       let spell = transient;
+
+      // Tell dnd5e to treat this as a fixed-level cast (spell-scroll style).
+      // dnd5e 5.x's `Activity._prepareUsageConfig` reads `flags.dnd5e.spellLevel`
+      // and routes the leveling-flag branch — `_prepareUsageScaling` then
+      // computes `usageConfig.scaling = value - base`, so damage activities
+      // apply the per-level scaling formula the right number of times.
+      // Without this flag the `usage.scaling` we pass below gets overwritten
+      // to `false` for non-spell-slot casts, and nothing scales.
+      if (upcastLevel !== spell.system.level) {
+        await spell.update({
+          "flags.dnd5e.spellLevel": { value: upcastLevel, base: spell.system.level },
+        });
+      }
 
       const itemUseConfiguration = { consume: false };
 
@@ -322,6 +362,10 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
         } else {
           Logger.info("The summoning dialog has been dismissed, not using the item.");
           await safeDeleteTransient(actor, transient.id);
+          // `scheduleTransientCleanup`'s deferred hook will eventually fire
+          // (or time out at 30s) and run unpauseArgon — release it now so
+          // the user isn't waiting on a stale paused HUD.
+          unpauseArgon();
           return;
         }
       }
@@ -353,7 +397,7 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
       if (chatData) {
         await this.consume(consumption);
         if (!this.magicItem.isDestroyed) {
-          this.magicItem.update();
+          await this.magicItem.update();
         }
       }
 

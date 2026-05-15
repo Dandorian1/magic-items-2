@@ -1,3 +1,48 @@
+### 5.0.11
+#### Bug fix — eliminate the spell-icon flash at end of cast
+5.0.10 fixed the cast-blocking TypeError and the Argon panel-bar blink, but the spell icons themselves still flashed at end of cast. Root cause: `pauseArgon().resume()` was calling `ui.ARGON.refresh()` for the catch-up, which re-renders **every** itemButton on the HUD in a single pass — that's the visible flash. Replaced with a targeted catch-up: `argon.accordionPanelCategories.forEach(c => c.setUses())` (which is what the underlying `_onUpdateActor` does for pip counts) plus `argon.components.portrait.refresh()` (action tracker). No full re-render, so no button flash. The state that actually matters post-cast — charge pips and action tracker — still updates correctly.
+
+### 5.0.10
+#### Bug fix — 5.0.9 broke casting entirely
+5.0.9's `pauseArgon()` tried to set `ui.ARGON.rendered = false`, but on Foundry v13 `rendered` is a getter on the `ApplicationV2` base class — that assignment throws `TypeError: Cannot set property rendered of #<ApplicationV2> which has only a getter` and the whole cast aborts before `createEmbeddedDocuments` ever runs. Removed the `rendered` write — it was redundant anyway. Both Argon core's hook handlers (`_onCreateItem`/`_onUpdateItem`/`_onDeleteItem`) and the dnd5e binding's inline `updateItem` handler short-circuit on the `e.parent === this._actor` check **before** any `rendered` test, so nulling `_actor` (which we already do) is sufficient. Also made the `_actor` write defensive via `Object.defineProperty` so a future Argon version promoting `_actor` to a getter wouldn't break the same way.
+
+### 5.0.9
+#### Bug fix — eliminate the Argon HUD blink on every cast (proper fix)
+5.0.8 attempted to fix the blink by blanking `activation.type` on the transient's activities so Argon's panel visibility filter would skip it. **The wiki misled me** — that filter only governs which items get a *button* in the panel, but Argon's `_onCreateItem`/`_onUpdateItem`/`_onDeleteItem` hook handlers still fire and still call `setUses()` + button-renders + `portrait.refresh()` regardless. So the blink persisted across both the transient's create/update lifecycle and our staff write-back. Reading Argon's source directly (`enhancedcombathud/index.js`) shows every one of those handlers guards on `e.parent === this._actor`, and the dnd5e binding additionally guards on `ui.ARGON.rendered`.
+
+Proper fix: new `pauseArgon()` helper in `argon.js` that, for the duration of a magicitems cast, nulls `ui.ARGON._actor` and sets `ui.ARGON.rendered = false` — both of Argon's hook handlers then short-circuit. `OwnedMagicItemSpell.roll()` acquires the pause before `createEmbeddedDocuments`, hands the resume callback to `scheduleTransientCleanup` (so the unpause fires alongside the eventual transient delete, after the dnd5e/midi-qol post-cast hooks settle), and releases it explicitly on every error / cancel path. The resume issues exactly one `argon.refresh()` so the new pip count + actor state reflect once at the end. The 5.0.8 `activation.type = ""` change is kept as defence-in-depth — harmless and may help with future Argon panel-prep changes.
+
+### 5.0.8
+#### Bug fix — eliminate the Argon HUD blink on every cast
+Casting a spell from a magic item caused the Argon Enhanced Combat HUD to visibly flicker, because the cast flow creates a transient embedded spell (`createEmbeddedDocuments`) and deletes it post-cast (`deleteEmbeddedDocuments`), and Argon re-renders its panel on both `createItem` and `deleteItem` Foundry hooks. Per Argon's own wiki (theripper93.com), its visibility filter is *"first activity's `activation.type` ∈ {action, bonus, reaction, special}"* — anything else is skipped entirely. Now `buildSpellData()` blanks `activation.type` to `""` on every activity of the transient before `createEmbeddedDocuments`, so Argon's filter excludes it and no re-render fires. `consume: false` was already suppressing action-economy gating on the cast, so blanking the activation type has no effect on dnd5e's workflow — the cast still produces the same chat card, damage/healing rolls, and effect application.
+
+### 5.0.7
+#### Bug fixes — upcast dialog + chat card styling + upcast scaling
+Three bugs that surfaced during VPS smoke-testing of 5.0.6, all in the cast/upcast flow.
+
+* **Upcast dialog inputs were unreadable.** `MagicItemUpcastDialog` was tagged with the v1 `dnd5e` class, so dnd5e 5.x's v2 dark-theme form styling didn't apply and the dropdown/consumption text rendered near-black on the dark dialog background. Switched the class to `dnd5e2 dialog magicitems-upcast-dialog` and added scoped CSS that overrides the default v2 *parchment* dialog background with the dark-panel look the v2 character/item sheets use. The marker class scopes the override so we don't restyle every `.dnd5e2.dialog` Foundry surfaces.
+* **`OwnedMagicItem.formatMessage()` chat messages used v1 `dnd5e` styling** while everything else in dnd5e 5.x renders v2. The "Erlen takes a long rest / Recovery / Staff of Healing Uses +5" cards in chat stood out as parchment cards in a sea of v2 dark cards. Switched to `dnd5e2 chat-card item-card`. Also dropped a hardcoded `title="Palla di Fuoco"` (a stray Italian "Fireball" tooltip on every magicitems chat card's icon) — now uses the actual item name.
+* **Upcasting a spell from a magic item did nothing to the damage/healing roll.** Casting Cure Wounds at 4th level still produced 1d8 + mod instead of 4d8 + mod. Root cause: dnd5e 5.x's `Activity._prepareUsageConfig` overwrites `usageConfig.scaling` to `false` for non-spell-slot casts unless either (a) the activity is consuming a spell slot or (b) `flags.dnd5e.spellLevel = { value, base }` is set on the item (the spell-scroll convention). We pass `scaling: upcastLevel - baseLevel` but it was getting clobbered. Fix: when materialising the transient, set `flags.dnd5e.spellLevel = { value: upcastLevel, base: spell.system.level }` before calling `.use()`. dnd5e's `_prepareUsageScaling` then sets `usageConfig.scaling = value - base` and the activity damage formulas apply the per-level scaling the right number of times.
+
+Verified: `npm run lint` clean, **113/113** vitest suite green, `vite build` + bundle-parse pass.
+
+### 5.0.6
+#### Refactor — Phase 2 of post-5.0.4 cleanup
+Low-risk live-code cleanups from the structural code review: async/await rewrites, fire-and-forget async-`forEach` fixes, and a hardened `update()`. No user-facing runtime behavior change, but several internal sequencing guarantees are now real.
+
+#### Code cleanup
+* **`AbstractMagicItemEntry.entity()` / `data()` — rewritten as `async`/`await` (#3).** The old `entity()` was a 38-line explicit-Promise-constructor anti-pattern with three bare `reject()` calls that passed no reason, so `catch` handlers got `undefined`. The new version is linear `async`/`await` and rejects with descriptive `Error`s (e.g. `"MagicItem entry not found in pack <id> (<name>)"`). All callers already `await` it; the contract is otherwise unchanged.
+* **`OwnedMagicItem.update()` is now `async` with `try/catch/finally` (#7).** Pairs naturally with the 5.0.4 `.finally()` listener-wedge fix: callers can now `await` the flag write-back, and a rejected `item.update()` is caught + logged (`Logger.warn`) so the rejection no longer dangles as an unhandled Promise. `resumeListening()` is still guaranteed on both success and failure paths. Four callers updated to `await`: `module.js:533` (the `updateItem` hook's internal-charges branch), `OwnedMagicItem.consume → doRecharge` self-call, `OwnedMagicItemFeat.roll` post-use, `OwnedMagicItemSpell.roll` post-use.
+* **Four fire-and-forget `forEach(async …)` sites fixed (#4).** Replaced with `await Promise.all(arr.map(…))` (parallel) or `for…of` (sequential), so the outer function actually awaits the inner work:
+  * `MagicItemActor.fireChange()` — listeners now awaited, so `await fireChange()` truly settles before returning.
+  * `API.execActorShortRest` / `execActorLongRest` — rest application across an actor's magic items now awaited (was previously returning before per-item work completed).
+  * `AbstractOwnedMagicItemEntry.applyActiveEffects` — outer token loop converted to `for…of`; inner per-effect application now `await Promise.all`-mapped. Also added `await` to the existing-effect toggle update.
+
+#### Tests
+* New regression tests in `tests/unit/owned-magic-item.test.js`: pin `update()` resumes listening on both success and failure paths (locks in the 5.0.4 wedge fix + the new `try/catch/finally`).
+
+Verified: `npm run lint` clean, **113/113** vitest suite green, `vite build` + bundle-parse pass.
+
 ### 5.0.5
 #### Refactor — Phase 1 of post-5.0.4 cleanup
 Zero-risk dead-code removal and an inert-option fix from a structural code review. No runtime behavior change.

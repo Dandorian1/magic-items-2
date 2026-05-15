@@ -513,3 +513,28 @@
       24px;
   }
 }
+
+/* MagicItemUpcastDialog — override the v2 parchment dialog background with
+   the dark-panel look the v2 character/item sheets use. Scoped via the
+   `magicitems-upcast-dialog` marker class set in magicitemupcastdialog.js
+   so we don't restyle every `.dnd5e2.dialog` Foundry surfaces. */
+.magicitems-upcast-dialog .window-content {
+  background: rgba(18, 21, 27, 0.95);
+  color: var(--color-text-light-heading, #f5f1dc);
+}
+
+.magicitems-upcast-dialog #spell-config-form {
+  background: transparent;
+}
+
+.magicitems-upcast-dialog #spell-config-form .form-group label {
+  color: var(--color-text-light-heading, #f5f1dc);
+  font-weight: 700;
+}
+
+.magicitems-upcast-dialog #spell-config-form input[type="text"],
+.magicitems-upcast-dialog #spell-config-form select {
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--color-text-light-heading, #f5f1dc);
+  border: 1px solid rgba(159, 146, 117, 0.6);
+}

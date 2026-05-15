@@ -251,7 +251,7 @@ export class OwnedMagicItem extends MagicItem {
       this.setUses(this.getSystemUsesValue());
     }
 
-    this.update();
+    await this.update();
   }
 
   entryBy(itemId) {
@@ -274,17 +274,19 @@ export class OwnedMagicItem extends MagicItem {
     }
   }
 
-  update() {
+  async update() {
     this.magicItemActor.suspendListening();
-    this.item
-      .update({
+    try {
+      await this.item.update({
         flags: {
           [CONSTANTS.MODULE_ID]: this.serializeData(),
         },
-      })
-      .finally(() => {
-        this.magicItemActor.resumeListening();
       });
+    } catch (e) {
+      Logger.warn("MagicItem flag write-back failed", false, e);
+    } finally {
+      this.magicItemActor.resumeListening();
+    }
   }
 
   getRechargeableLabel() {
@@ -295,9 +297,9 @@ export class OwnedMagicItem extends MagicItem {
 
   formatMessage(msg) {
     return `
-            <div class="dnd5e chat-card item-card">
+            <div class="dnd5e2 chat-card item-card">
                 <header class="card-header flexrow">
-                    <img src="${this.img}" title="Palla di Fuoco" width="36" height="36" />
+                    <img src="${this.img}" title="${this.name}" width="36" height="36" />
                     <h3 class="item-name">${this.name}</h3>
                 </header>
 

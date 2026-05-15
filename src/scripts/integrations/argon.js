@@ -477,6 +477,69 @@ function buildButton(actor, ownedMI, ownedSpell) {
   }
 }
 
+// Pause Argon's hook-driven refreshes across a magicitems cast cycle.
+//
+// Argon's core registers `createItem`/`updateItem`/`deleteItem` handlers whose
+// guard is `e.parent === this._actor`. The dnd5e binding registers an inline
+// `updateItem` handler whose guard is `r.parent === ui.ARGON._actor && ...`.
+// Both short-circuit on the `_actor` comparison FIRST, so nulling `_actor`
+// alone makes every one of them a no-op — no need to also clobber `rendered`
+// (and we can't anyway: it's a getter on Foundry v13's ApplicationV2 base).
+//
+// `_actor` itself is assigned as a regular property by Argon, but we set it
+// defensively via Object.defineProperty in case a future Argon version
+// promotes it to a getter.
+//
+// Single-pause-at-a-time is fine here — overlapping magicitems casts on the
+// same world are rare; a second concurrent caller gets a no-op resume.
+// Returned `resume` is idempotent.
+let _argonPaused = null;
+
+/**
+ *
+ * @param obj
+ * @param key
+ * @param value
+ */
+function setOrDefine(obj, key, value) {
+  try {
+    obj[key] = value;
+  } catch (e) {
+    // Property is a getter — override via defineProperty.
+    Object.defineProperty(obj, key, { value, configurable: true, writable: true });
+  }
+}
+
+/**
+ *
+ */
+export function pauseArgon() {
+  const argon = ui?.ARGON;
+  if (!argon) return () => {};
+  if (_argonPaused) return () => {}; // already paused; later caller's resume is a no-op
+  _argonPaused = { actor: argon._actor };
+  setOrDefine(argon, "_actor", null);
+  let released = false;
+  return function resume() {
+    if (released || !_argonPaused) return;
+    released = true;
+    const saved = _argonPaused;
+    _argonPaused = null;
+    setOrDefine(argon, "_actor", saved.actor);
+    // Targeted catch-up — don't `argon.refresh()`, which would re-render
+    // every itemButton on the HUD in one pass (visible as a spell-icon
+    // flash). The state we actually need to reflect post-cast is just the
+    // accordion pip counts (charges) and the portrait's action tracker.
+    try {
+      const cats = saved.actor ? saved.actor.apps && argon.accordionPanelCategories : argon.accordionPanelCategories;
+      cats?.forEach?.((c) => c.setUses?.());
+      argon.components?.portrait?.refresh?.();
+    } catch (e) {
+      Logger.warn(`Argon catch-up refresh failed: ${e?.message}`, false, e);
+    }
+  };
+}
+
 Hooks.on("argonInit", () => {
   if (game.system?.id !== "dnd5e") return;
   if (!game.modules.get("enhancedcombathud-dnd5e")?.active) return;

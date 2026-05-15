@@ -530,7 +530,7 @@ Hooks.on("updateItem", async (item, change, options, userId) => {
       if (miItem) {
         await miItem.updateInternalCharges(item.flags.magicitems?.internal, item);
         miItem.rechargeableLabel = miItem.getRechargeableLabel();
-        miItem.update();
+        await miItem.update();
       }
     }
     if (miActor && miActor.listening && miActor.actor.id === actor.id) {
