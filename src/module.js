@@ -5,7 +5,7 @@ import { MagicItemActor } from "./scripts/magicitemactor.js";
 import { MagicItemSheet } from "./scripts/magicitemsheet.js";
 import { MagicItemTab } from "./scripts/magicItemtab.js";
 import { MagicItem } from "./scripts/magic-item/MagicItem.js";
-import "./scripts/integrations/argon.js";
+import { startCastSuppression, scheduleCastSuppressionEnd } from "./scripts/integrations/argon.js";
 
 // CONFIG.debug.hooks = true;
 
@@ -232,16 +232,51 @@ Hooks.on("createToken", (token) => {
   }
 });
 
-Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
-  const magicItemActor = MagicItemActor.get(actor.id);
-  if (!magicItemActor) {
-    return;
+// Activate Argon refresh suppression at the earliest dnd5e rest hook so the
+// system's own batch of updateItem / updateActor events during the rest's
+// commit phase don't trigger debounced portrait re-renders or full-HUD
+// refreshes. `dnd5e.preRestCompleted` fires "after rest result is calculated,
+// but before any updates are performed" — exactly the window we want.
+//
+// Actor-scoped: only suppress when the resting actor is the one currently
+// bound to this client's Argon HUD. Critical for party / "rest all" macros
+// where the GM iterates multiple actors sequentially — without this guard,
+// every actor's rest would suppress refreshes on the GM's own HUD for 1.5s
+// past the LAST actor's restCompleted, swallowing any portrait updates the
+// GM would normally see from interacting with their bound actor during that
+// window.
+Hooks.on("dnd5e.preRestCompleted", (actor) => {
+  if (ui?.ARGON?._actor !== actor) return;
+  try {
+    startCastSuppression();
+  } catch (e) {
+    /* Argon not installed / not yet initialised — no-op */
   }
-  await magicItemActor.buildItems();
-  if (result.longRest || config.type === "long") {
-    await magicItemActor.onLongRest(result);
-  } else {
-    await magicItemActor.onShortRest(result);
+});
+
+Hooks.on("dnd5e.restCompleted", async (actor, result, config) => {
+  const isOurArgonActor = ui?.ARGON?._actor === actor;
+  try {
+    const magicItemActor = MagicItemActor.get(actor.id);
+    if (!magicItemActor) return;
+    await magicItemActor.buildItems();
+    if (result.longRest || config.type === "long") {
+      await magicItemActor.onLongRest(result);
+    } else {
+      await magicItemActor.onShortRest(result);
+    }
+  } finally {
+    // Only schedule end if we actually activated suppression for this
+    // actor in the matching pre-hook. Otherwise a third-party rest in a
+    // shared client would reset the tail and steal the rest of the
+    // current cast/rest's suppression window from us.
+    if (isOurArgonActor) {
+      try {
+        scheduleCastSuppressionEnd();
+      } catch (e) {
+        /* No-op */
+      }
+    }
   }
 });
 

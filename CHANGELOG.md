@@ -1,3 +1,83 @@
+### 5.0.19
+#### Bug fix — actor-scope the rest suppression to avoid party-rest cross-talk
+User asked: "would this cause issues if multiple players use a long rest at once?" Yes. 5.0.18's `dnd5e.preRestCompleted` hook activated `startCastSuppression()` unconditionally for any actor's rest. Two real scenarios broke:
+
+1. **GM running a "rest all" / party-rest macro** iterates multiple actors sequentially on the GM's client. Each actor's pre/post-rest pair fires the suppression hooks. The GM's Argon is bound to ONE actor (typically not the one resting). Without a guard, every iteration extends the 1.5s suppression tail, so the GM ends up with a multi-second window where their own HUD silently swallows portrait refreshes from any other action they take. Any flash they'd normally see when clicking through their own bound actor is gone for that whole window.
+
+2. **Party-rest mods** (Rest Recovery, Party Resources, etc.) that drive rests for the whole party from a single client trigger the same multi-actor pile-up.
+
+Fix: both rest hooks now early-return when `ui.ARGON._actor !== actor`. Suppression only activates when the resting actor IS the one bound to this client's Argon — the only case where the dnd5e binding's inline `updateItem → portrait.refresh()` handler would have fired a visible flash anyway (the binding gates on `r.parent === ui.ARGON._actor`).
+
+Per-client (not server-side), so each player's browser still suppresses for their own rest. The hooks fire only on the initiating client (dnd5e doesn't broadcast `dnd5e.restCompleted` over the socket), so concurrent rests from multiple players in their own browsers are naturally isolated.
+
+The `finally` block also captures the bound-actor check at hook entry and only calls `scheduleCastSuppressionEnd()` if the captured flag was true — so a third-party rest racing through the same client can't reset our tail.
+
+### 5.0.18
+#### Bug fix — also suppress Argon refreshes during long/short rest
+5.0.17 killed the post-cast blink. User reported: "Long reset still makes the spells blink when changing the used charges on the staff of healing." The long-rest path doesn't go through `pauseArgon` — it runs through the `dnd5e.restCompleted` hook, which fires AFTER dnd5e's own batch of `updateItem` / `updateActor` events for spell-slot recovery, HP recovery, hit-dice recovery, item-uses recovery. Each of those fires the dnd5e Argon binding's inline `updateItem → portrait.refresh()` handler, plus our magic-items recharge calls `item.update` per magic item, which fires the same handler again.
+
+Fix: hook `dnd5e.preRestCompleted` ("after rest result is calculated, but before any updates are performed") to call `startCastSuppression()`. dnd5e then applies all its updates with the refresh guards active (no flashes). Our existing `dnd5e.restCompleted` handler now runs the magic-items recharge inside a `try / finally`; the `finally` calls `scheduleCastSuppressionEnd()` with the same 1.5s tail as the cast path. Surgical `_setUses` (5.0.16) makes the pip strips on each magic item update smoothly through the cascade once suppression releases.
+
+Required exporting `startCastSuppression` and `scheduleCastSuppressionEnd` from `argon.js` (previously file-private) so the rest handler in `module.js` could call them. The `installRefreshSuppression` install is still lazy — first call installs the guards on `argon.refresh` and `argon.components.portrait.refresh`, subsequent calls are no-ops.
+
+### 5.0.17
+#### Bug fix — refresh-guard with post-cast tail kills the residual blink
+5.0.16 made the pip-strip cascade smooth (surgical `_setUses`) and the user confirmed: "i see the squares change smoothly on the staff of healing to X's and than afterword blinks." So the cascade is fixed, but a SECOND flash remained, firing after the smooth pip update.
+
+Traced two additional flash paths that fire after `pauseArgon` releases:
+
+1. **dnd5e Argon binding** (`enhancedcombathud-dnd5e/index.js`) registers an inline `updateItem` hook:
+   ```js
+   Hooks.on("updateItem", function(r) {
+     r.parent === ui.ARGON._actor && ui.ARGON.rendered && ui.ARGON.components.portrait.refresh();
+   });
+   ```
+   `consume()`'s staff-item update wins the race against the cleanup unpause (which is what makes the user see the smooth pip update during cast — `_actor` is restored before consume's hook fires). The dnd5e handler then triggers `portrait.refresh()` → debounced 100ms → `PortraitPanel._renderInner` does `this.element.innerHTML = ...` on the portrait element → visible flash.
+
+2. **Side-effect items from midi-qol / chris-premades** can create temporary embedded items on the actor during their workflow. The createItem fires `_onCreateItem` → `_checkItemCount` (count changed) → `argon.refresh()` → full HUD render → big flash.
+
+Fix: permanent guards on `argon.refresh` and `argon.components.portrait.refresh` that no-op while a `_castSuppressionActive` flag is set. The flag goes on at `pauseArgon` and stays on for **1500ms past the natural unpause** — long enough to cover midi-qol's typical post-`.use()` workflow (heal/damage application, AE application, etc.). One trailing portrait refresh fires when the suppression window expires, so the portrait isn't left stale.
+
+The guards are installed once at argonInit and stay installed (their no-op path is cheap). The suppression flag itself is what gates them, and the timer-based extension is what catches the post-`.use()` tail.
+
+Belt-and-suspenders with 5.0.15's pause stubs (which suppress the *paused-window* renders) and 5.0.16's surgical `_setUses` (which makes any cascade that does fire visually smooth).
+
+### 5.0.16
+#### Bug fix — surgical pip-strip update finally kills the cast blink
+9th attempt at the Argon-cast blink. Dug into the actual Argon source on the VPS (`/var/lib/foundryvtt/Data/modules/enhancedcombathud/scripts/app/`) and found the real culprit. The user's hint that "no blink when the staff is at 0 charges" was the giveaway — the blink is tied to consume()'s `updateItem` hook, not to the transient lifecycle.
+
+Confirmed mechanism: `CoreHud._onUpdateItem` at line 193 of `scripts/app/CoreHud.js` does, **for every actor-parented item update**:
+
+```js
+_onUpdateItem(item) {
+  if (item.parent !== this._actor) return;
+  this.accordionPanelCategories.forEach((category) => category.setUses());
+  // ...
+}
+```
+
+So *any* `updateItem` event on the bound actor fans out a `setUses()` call to every accordion category — Staff of Healing, Staff of Fire, Cantrip, 1st-5th Level, etc. And `AccordionPanelCategory._setUses` (at `scripts/app/components/main/buttonPanel/accordionPanelCategory.js`) does:
+
+```js
+usesElement.innerHTML = "";
+for (let index = 0; index < this.uses.max; index++) {
+  usesElement.innerHTML += `<span class="spell-slot spell-${...}"></span>`;
+}
+```
+
+That's the visible flash — every pip strip clears and rebuilds, simultaneously, for every category. When the staff is at 0 charges, `consume()` short-circuits, no `updateItem` fires, no cascade, no blink. Exactly matches the reproducer.
+
+Fix: capture `AccordionPanelCategory` via Argon's `renderAccordionPanelCategoryArgonComponent` hook (same pattern as the existing `ButtonPanelButton`/`ItemButton` captures), then `libWrapper.register(..., "_setUses", surgicalSetUses, "OVERRIDE")` the prototype with a diff-update implementation that:
+
+1. Reads the existing `.spell-slot` spans from the DOM.
+2. Grows or shrinks the pip count to match `uses.max` by appendChild / .remove() at the boundary only.
+3. Toggles `spell-used` / `spell-available` classes on each pip with `classList.toggle` (no-op when the class is already in the desired state).
+4. Never resets `innerHTML` on the strip container.
+
+`classList.toggle` doesn't repaint when the class is unchanged, and `appendChild` of a single span doesn't visually disrupt sibling pips. Net effect: even when `_setUses` is called dozens of times across every category, the user sees zero flash.
+
+Pause/resume stubs from 5.0.15 are kept as belt-and-suspenders for the transient lifecycle (still want to suppress full HUD refreshes from `_checkItemCount`), but the surgical pip update is the root-cause fix for the cast blink.
+
 ### 5.0.15
 #### Bug fix — stub Argon at the prototype level, not just instances
 After deep-research into Argon's actual source on GitHub (`theripper93/enhancedcombathud`), found the real leak: `AccordionPanelCategory.updateItem(item)` (in `scripts/app/components/main/buttonPanel/accordionPanelCategory.js`, lines 51–56) iterates its own `_buttons` collection and calls `button.render()` on each matching one. **It's a per-instance method, not a Foundry hook, and not gated by `this._actor`.** So any direct caller (dnd5e's magic-item flag refresh, the activity workflow's internal item-sheet refresh, etc.) cascades into `button.render()`, which in `ArgonComponent._renderInner` does `this.element.innerHTML = …` — that's the visible flash.

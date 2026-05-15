@@ -30,8 +30,10 @@ const SYNTHETIC_FLAG = "syntheticSpell";
 
 let _ButtonPanelButtonCtor = null;
 let _ItemButtonCtor = null;
+let _AccordionPanelCategoryCtor = null;
 let _wrappedPrepare = false;
 let _wrappedClick = false;
+let _surgicalSetUsesInstalled = false;
 
 /**
  *
@@ -477,6 +479,212 @@ function buildButton(actor, ownedMI, ownedSpell) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Surgical pip-strip update — the actual blink fix.
+//
+// Argon's `AccordionPanelCategory._setUses` (Argon source:
+// `scripts/app/components/main/buttonPanel/accordionPanelCategory.js`) does:
+//
+//     usesElement.innerHTML = "";
+//     for (let i = 0; i < this.uses.max; i++) {
+//       usesElement.innerHTML += `<span class="spell-slot spell-${...}"></span>`;
+//     }
+//
+// Clearing innerHTML and rebuilding from strings is what produces the visible
+// pip-strip flash. It's called by `CoreHud._onUpdateItem` for EVERY accordion
+// category whenever ANY item on the bound actor updates:
+//
+//     this.accordionPanelCategories.forEach((category) => category.setUses());
+//
+// So consume()-ing a charge on the staff updates the staff item, fires
+// `updateItem`, and every spell-panel category's pip strip clears and rebuilds
+// — N flashes simultaneously. When the staff is at 0 charges, consume() is
+// a no-op, no `updateItem` fires, and there is no blink. That matches the
+// user's reproducer exactly.
+//
+// Fix: replace `_setUses` with a diff-update that mutates the existing
+// `.spell-slot` spans in place — toggles `spell-used` / `spell-available`
+// classes, appends/removes spans only at the boundary, never resets the
+// container's `innerHTML`. No flash even when the cascade fires.
+//
+// Installed once, permanently, the first time we see an AccordionPanelCategory
+// instance render. Idempotent.
+/**
+ *
+ */
+function installSurgicalSetUses() {
+  if (_surgicalSetUsesInstalled || !_AccordionPanelCategoryCtor) return;
+  const proto = _AccordionPanelCategoryCtor.prototype;
+  if (!proto || typeof proto._setUses !== "function") return;
+
+  /**
+   * Surgical reimplementation of AccordionPanelCategory._setUses.
+   * `this` is the AccordionPanelCategory instance at call time.
+   */
+  // eslint-disable-next-line jsdoc/require-jsdoc
+  function surgicalSetUses() {
+    const uses = this.uses;
+    if (!uses || !Number.isNumeric(uses.value)) return;
+    const usesElement = this.buttonContainer?.querySelector(".feature-spell-slots");
+    if (!usesElement) return;
+
+    // Infinity (cantrip) — render a single infinity-icon span. Idempotent.
+    if (uses.value === Infinity) {
+      const hasInfinity = usesElement.querySelector(".spell-cantrip");
+      if (!hasInfinity) {
+        usesElement.innerHTML = `<span class="spell-slot spell-cantrip"><i class="fas fa-infinity"></i></span>`;
+      }
+      return;
+    }
+
+    const max = Math.max(0, Number(uses.max) || 0);
+    const value = Math.max(0, Number(uses.value) || 0);
+    const used = Math.max(0, max - value);
+
+    const pips = Array.from(usesElement.querySelectorAll(".spell-slot"));
+
+    // If we're transitioning out of an infinity-icon state, the existing pip
+    // is the cantrip icon — drop it before building real pips.
+    if (pips.length === 1 && pips[0].classList.contains("spell-cantrip")) {
+      pips[0].remove();
+      pips.length = 0;
+    }
+
+    // Grow / shrink the pip count to match `max`.
+    while (pips.length < max) {
+      const span = document.createElement("span");
+      span.className = "spell-slot";
+      usesElement.appendChild(span);
+      pips.push(span);
+    }
+    while (pips.length > max) {
+      pips.pop()?.remove();
+    }
+
+    // Update each pip's used/available class. classList.toggle is a no-op
+    // when the class is already in the desired state — no layout thrash.
+    for (let i = 0; i < max; i++) {
+      const isUsed = i < used;
+      const pip = pips[i];
+      pip.classList.toggle("spell-used", isUsed);
+      pip.classList.toggle("spell-available", !isUsed);
+    }
+  }
+
+  if (hasLibWrapper()) {
+    try {
+      libWrapper.register(CONSTANTS.MODULE_ID, proto, "_setUses", surgicalSetUses, "OVERRIDE");
+    } catch (e) {
+      Logger.warn(`Argon: libWrapper override of _setUses failed: ${e?.message}`, false, e);
+      proto._setUses = surgicalSetUses;
+    }
+  } else {
+    proto._setUses = surgicalSetUses;
+  }
+  _surgicalSetUsesInstalled = true;
+}
+
+// ---------------------------------------------------------------------------
+// Refresh suppression with post-cast tail — kills the second-tier blink.
+//
+// 5.0.16's surgical `_setUses` patch eliminated the pip-strip cascade flash,
+// but the user still saw a blink "afterward." Tracing through Argon + dnd5e
+// binding revealed two additional paths that fire AFTER our `pauseArgon`
+// window ends:
+//
+// 1. The dnd5e Argon binding (`enhancedcombathud-dnd5e/index.js`) registers
+//    an inline `updateItem` hook handler:
+//        r.parent === ui.ARGON._actor && ui.ARGON.rendered && ui.ARGON.components.portrait.refresh()
+//    When `consume()` fires updateItem on the staff and the race lets it
+//    execute unpaused (which is what makes the user see the smooth pip
+//    update), the dnd5e handler also fires → `portrait.refresh()` →
+//    debounced 100ms → `PortraitPanel._renderInner` does an `innerHTML =
+//    ...` on the portrait element = post-cast flash.
+//
+// 2. midi-qol / chris-premades create temporary embedded items on the actor
+//    during their workflow. After our `pauseArgon` ends, the next createItem
+//    or deleteItem with `parent === argon._actor` runs `_checkItemCount`,
+//    which compares `actor.items.size` to `_itemsCount` and calls
+//    `argon.refresh()` (debounced 200ms) on any change — full HUD render.
+//
+// Both flashes are suppressible the same way: wrap `argon.refresh` and
+// `argon.components.portrait.refresh` with a guard that no-ops while a
+// "cast in progress" flag is set. The flag is set at pauseArgon and cleared
+// after a 1500ms tail past unpauseArgon (long enough to cover midi-qol's
+// typical post-`.use()` workflow). One trailing portrait refresh fires when
+// the suppression window expires so the portrait isn't left stale.
+//
+// Permanent wraps — they stay installed across casts (the guard's no-op
+// path is cheap). Idempotent install at argonInit.
+let _castSuppressionActive = false;
+let _castSuppressionTimer = null;
+let _suppressionInstalled = false;
+
+/**
+ *
+ */
+function installRefreshSuppression() {
+  if (_suppressionInstalled) return;
+  const argon = ui?.ARGON;
+  if (!argon) return;
+
+  // Wrap argon.refresh — the debounced full-HUD render path.
+  if (typeof argon.refresh === "function") {
+    const origRefresh = argon.refresh;
+    argon.refresh = function (...args) {
+      if (_castSuppressionActive) return;
+      return origRefresh.apply(this, args);
+    };
+  }
+
+  // Wrap argon.components.portrait.refresh — the dnd5e binding's go-to.
+  const portrait = argon.components?.portrait;
+  if (portrait && typeof portrait.refresh === "function") {
+    const origPortraitRefresh = portrait.refresh;
+    portrait.refresh = function (...args) {
+      if (_castSuppressionActive) return;
+      return origPortraitRefresh.apply(this, args);
+    };
+  }
+
+  _suppressionInstalled = true;
+}
+
+/**
+ * Begin refresh suppression. Used both by the per-cast pauseArgon flow and
+ * by external callers wrapping long-rest / short-rest commit windows.
+ */
+export function startCastSuppression() {
+  installRefreshSuppression();
+  _castSuppressionActive = true;
+  if (_castSuppressionTimer) {
+    clearTimeout(_castSuppressionTimer);
+    _castSuppressionTimer = null;
+  }
+}
+
+/**
+ * Schedule the suppression window to end after a 1.5s tail (covers post-cast
+ * and post-rest async tails — midi-qol heal/damage application, dnd5e
+ * inventory recovery side-effects, etc.). Exported for use by callers that
+ * begin suppression via {@link startCastSuppression} directly.
+ */
+export function scheduleCastSuppressionEnd() {
+  if (_castSuppressionTimer) clearTimeout(_castSuppressionTimer);
+  _castSuppressionTimer = setTimeout(() => {
+    _castSuppressionActive = false;
+    _castSuppressionTimer = null;
+    // One trailing portrait refresh so the portrait isn't stale post-cast.
+    // Late enough that the user has stopped watching the cast; if it does
+    // produce a brief flash, the user's eye is elsewhere.
+    try {
+      ui.ARGON?.components?.portrait?.refresh?.();
+    } catch (e) {
+      /* Ignore */
+    }
+  }, 1500);
+}
+
 // Pause Argon's hook-driven refreshes across a magicitems cast cycle.
 //
 // Argon's core registers `createItem`/`updateItem`/`deleteItem` handlers whose
@@ -516,6 +724,11 @@ function setOrDefine(obj, key, value) {
 export function pauseArgon() {
   const argon = ui?.ARGON;
   if (!argon) return () => {};
+  // Mark cast as in-progress so the persistent refresh guards no-op.
+  // Covers the dnd5e binding's inline `updateItem → portrait.refresh()`
+  // and any `_checkItemCount → argon.refresh()` triggered by side-effect
+  // items midi-qol / chris-premades create during the workflow.
+  startCastSuppression();
   if (_argonPaused) return () => {}; // already paused; later caller's resume is a no-op
   // The leak: `AccordionPanelCategory.updateItem(item)` (per-instance method
   // in Argon's source) iterates its `_buttons` and calls `button.render()`
@@ -574,6 +787,12 @@ export function pauseArgon() {
     for (const { obj, key, orig } of saved.stubbed) {
       obj[key] = orig;
     }
+    // Keep the refresh suppression active for an extra 1.5s tail so that
+    // midi-qol's post-`.use()` workflow (heal/damage application, AE
+    // application, etc.) doesn't trigger a portrait or HUD refresh after
+    // we've handed control back. One trailing portrait refresh fires when
+    // the suppression window expires.
+    scheduleCastSuppressionEnd();
   };
 }
 
@@ -594,6 +813,16 @@ Hooks.on("argonInit", () => {
       _ItemButtonCtor = cmp.constructor;
       applyWraps();
     }
+  });
+  // Capture AccordionPanelCategory the first time one renders so we can
+  // patch `_setUses` for surgical pip updates (the actual blink fix).
+  // Argon's `render<ParentClass>ArgonComponent` hook fires for the base
+  // class name (`AccordionPanelCategory`); the dnd5e module doesn't
+  // subclass this one, so cmp.constructor.name === "AccordionPanelCategory".
+  Hooks.on("renderAccordionPanelCategoryArgonComponent", (cmp) => {
+    if (_AccordionPanelCategoryCtor) return;
+    _AccordionPanelCategoryCtor = cmp.constructor;
+    installSurgicalSetUses();
   });
 });
 
