@@ -1,3 +1,10 @@
+# Force LF for all text files, in the repo and on checkout (matches .editorconfig).
+# git auto-detects binary files; the explicit rules below belt-and-suspender it.
+* text=auto eol=lf
+
+*.png binary
+*.db binary
+
 .github export-ignore
 FUNDING.yml export-ignore
 
