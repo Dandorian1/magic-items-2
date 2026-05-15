@@ -517,24 +517,45 @@ export function pauseArgon() {
   const argon = ui?.ARGON;
   if (!argon) return () => {};
   if (_argonPaused) return () => {}; // already paused; later caller's resume is a no-op
-  // Collect every Argon sub-component that has a render() — accordion
-  // categories AND item buttons — and stub each one out for the duration
-  // of the cast. This catches the ApplicationV2 per-document app
-  // subscription path (auto-render when subscribed document mutates),
-  // which `_actor = null` alone doesn't suppress. Without this, an update
-  // to the staff (or any actor item) during cast triggers the accordion
-  // sub-components to re-render directly, bypassing Argon's main hooks.
+  // The leak: `AccordionPanelCategory.updateItem(item)` (per-instance method
+  // in Argon's source) iterates its `_buttons` and calls `button.render()`
+  // on each matching one. It is NOT gated by `this._actor` — so any direct
+  // caller (dnd5e flag refresh on the staff, midi pipeline, etc.) bypasses
+  // the actor-null guard entirely. The instance-level stubs we tried in
+  // 5.0.14 missed the call because Argon can re-construct button instances
+  // mid-cast, and the new ones came in unstubbed.
+  //
+  // Fix: stub at the PROTOTYPE level so every instance — current and any
+  // created during pause — is covered. Restored on resume.
   const stubbed = [];
-  const stubRender = (obj) => {
-    if (!obj || typeof obj.render !== "function") return;
-    const orig = obj.render;
-    obj.render = () => undefined;
-    stubbed.push({ obj, orig });
+  const stubMethod = (obj, key) => {
+    if (!obj || typeof obj[key] !== "function") return;
+    const orig = obj[key];
+    obj[key] = function () {};
+    stubbed.push({ obj, key, orig });
   };
-  for (const cat of argon.accordionPanelCategories ?? []) stubRender(cat);
-  for (const btn of argon.itemButtons ?? []) stubRender(btn);
-  for (const cmp of argon.components?.main ?? []) stubRender(cmp);
-  if (argon.components?.portrait) stubRender(argon.components.portrait);
+
+  // Instance-level stubs (existing components — belt-and-suspenders).
+  for (const cat of argon.accordionPanelCategories ?? []) {
+    stubMethod(cat, "updateItem");
+    stubMethod(cat, "render");
+    stubMethod(cat, "setUses");
+  }
+  for (const btn of argon.itemButtons ?? []) stubMethod(btn, "render");
+  for (const cmp of argon.components?.main ?? []) stubMethod(cmp, "render");
+  if (argon.components?.portrait) stubMethod(argon.components.portrait, "refresh");
+
+  // Prototype-level stubs — the actual fix. Catches new instances created
+  // during the cast (Argon's accordion sometimes rebuilds buttons mid-flow).
+  const categoryProto = (argon.accordionPanelCategories ?? [])[0]?.constructor?.prototype;
+  if (categoryProto) {
+    stubMethod(categoryProto, "updateItem");
+    stubMethod(categoryProto, "setUses");
+    stubMethod(categoryProto, "render");
+  }
+  if (_ItemButtonCtor?.prototype) {
+    stubMethod(_ItemButtonCtor.prototype, "render");
+  }
 
   _argonPaused = { actor: argon._actor, stubbed };
   setOrDefine(argon, "_actor", null);
@@ -546,11 +567,12 @@ export function pauseArgon() {
     const saved = _argonPaused;
     _argonPaused = null;
     setOrDefine(argon, "_actor", saved.actor);
-    // Restore render methods. Items may have been mutated underneath,
-    // but the next natural updateItem / updateActor will fire Argon's
-    // hooks and bring pip counts current. Brief staleness > flash.
-    for (const { obj, orig } of saved.stubbed) {
-      obj.render = orig;
+    // Restore every stubbed method. Items may have been mutated underneath
+    // while we were suppressing renders, but the next natural updateItem /
+    // updateActor will fire Argon's hooks and bring pip counts current.
+    // Brief staleness > guaranteed flash.
+    for (const { obj, key, orig } of saved.stubbed) {
+      obj[key] = orig;
     }
   };
 }

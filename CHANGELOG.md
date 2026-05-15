@@ -1,3 +1,11 @@
+### 5.0.15
+#### Bug fix — stub Argon at the prototype level, not just instances
+After deep-research into Argon's actual source on GitHub (`theripper93/enhancedcombathud`), found the real leak: `AccordionPanelCategory.updateItem(item)` (in `scripts/app/components/main/buttonPanel/accordionPanelCategory.js`, lines 51–56) iterates its own `_buttons` collection and calls `button.render()` on each matching one. **It's a per-instance method, not a Foundry hook, and not gated by `this._actor`.** So any direct caller (dnd5e's magic-item flag refresh, the activity workflow's internal item-sheet refresh, etc.) cascades into `button.render()`, which in `ArgonComponent._renderInner` does `this.element.innerHTML = …` — that's the visible flash.
+
+5.0.14's instance-level stubs missed it because Argon can construct fresh button instances mid-cast (the accordion sometimes rebuilds), and the new instances came in unstubbed.
+
+Fix: stub at the **prototype level** so every instance — current AND any created during the pause — is covered. Specifically `AccordionPanelCategory.prototype.{updateItem, setUses, render}` and `ItemButton.prototype.render` are no-op'd for the cast duration, restored on resume. Instance-level stubs are kept as belt-and-suspenders.
+
 ### 5.0.14
 #### Bug fix — also stub component render() during cast to catch ApplicationV2 auto-rerender
 5.0.10's pause (`_actor = null`) successfully suppressed Argon's hook-driven re-renders — that's why the main HUD bar stopped flashing. The spell accordion strip kept flashing because **Argon's accordion categories and item buttons are ApplicationV2 sub-components that subscribe to their underlying documents directly**: when a subscribed document updates (the staff's charge consume, the transient spell's flag write, etc.), Foundry automatically re-renders the subscribed Application *outside* of the Foundry hook chain. The `_actor` check doesn't apply to that path because the per-Application document-subscription is checked at the Document level, not against Argon's active actor.
