@@ -5,9 +5,11 @@
  * globals into the `foundry.*` namespaces (deprecation since v12, removal
  * targeted at v14/v15). We capture the namespaced reference at module load
  * with a legacy-global fallback so the module keeps working across the
- * transition window. Each constant is intentionally read at file-evaluation
- * time, not lazily — Foundry's namespaces are populated before any module
- * code runs.
+ * transition window. The `foundry.*` namespace shims are read at
+ * file-evaluation time — those namespaces are populated before any module
+ * code runs. `RollImpl` / `ChatMessageImpl` are the exception: they read
+ * `CONFIG.*`, which dnd5e populates in its `init` hook (after module import),
+ * so they re-resolve at `setup`.
  *
  * Use these named imports instead of re-introducing the
  * `foundry.X ?? globalThis.X` ternary inline in every file.
@@ -33,11 +35,20 @@ export const TextEditorImpl =
 export const CompendiumCollectionClass =
   foundry.documents?.collections?.CompendiumCollection ?? globalThis.CompendiumCollection;
 
-/** System-aware Roll class (dnd5e overrides via CONFIG.Dice.rolls[0]). */
-export const RollImpl = globalThis.CONFIG?.Dice?.rolls?.[0] ?? globalThis.Roll;
+/** System-aware Roll class — re-resolved at `setup` (dnd5e registers its Roll
+ * subclasses into `CONFIG.Dice.rolls` in its `init` hook, after module import).
+ * `export let` + re-assignment propagates to importers via live bindings. */
+export let RollImpl = globalThis.CONFIG?.Dice?.rolls?.[0] ?? globalThis.Roll;
 
-/** System-aware ChatMessage document class (dnd5e overrides for card-render hooks). */
-export const ChatMessageImpl = globalThis.CONFIG?.ChatMessage?.documentClass ?? globalThis.ChatMessage;
+/** System-aware ChatMessage document class (dnd5e's ChatMessage5e adds the
+ * card-render hooks midi-qol expects) — see `RollImpl` for the lazy rationale. */
+export let ChatMessageImpl = globalThis.CONFIG?.ChatMessage?.documentClass ?? globalThis.ChatMessage;
+
+// Re-resolve the CONFIG-backed classes once dnd5e's `init` handler has run.
+Hooks.once("setup", () => {
+  RollImpl = globalThis.CONFIG?.Dice?.rolls?.[0] ?? globalThis.Roll;
+  ChatMessageImpl = globalThis.CONFIG?.ChatMessage?.documentClass ?? globalThis.ChatMessage;
+});
 
 /** DialogV2 helper — convenience wrapper around the wait-style API used by
  * the simple yes/no flows in this module. Resolves to the action string the

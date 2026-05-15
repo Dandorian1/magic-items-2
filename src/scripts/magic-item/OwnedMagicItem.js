@@ -282,7 +282,7 @@ export class OwnedMagicItem extends MagicItem {
           [CONSTANTS.MODULE_ID]: this.serializeData(),
         },
       })
-      .then(() => {
+      .finally(() => {
         this.magicItemActor.resumeListening();
       });
   }

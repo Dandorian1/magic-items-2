@@ -26,7 +26,7 @@ jobs:
           download: https://github.com/${{github.repository}}/releases/download/${{github.event.release.tag_name}}/module.zip
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       # Compile the compendium pack JSON sources (under src/packs/_source/)
       # into the LevelDB pack databases (under src/packs/<pack-name>/) that

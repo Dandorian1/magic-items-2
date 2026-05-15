@@ -500,7 +500,7 @@ Hooks.on("hotbarDrop", async (bar, data, slot) => {
         command: command,
         flags: { "dnd5e.itemMacro": true },
       },
-      { displaySheet: false },
+      { renderSheet: false },
     );
   }
   game.user.assignHotbarMacro(macro, slot);
@@ -523,7 +523,9 @@ Hooks.on("updateItem", async (item, change, options, userId) => {
   if (item.actor) {
     const actor = item.actor;
     const miActor = MagicItemActor.get(actor.id);
-    if (miActor && item.flags.magicitems?.internal) {
+    // The `listening` guard skips the module's own write-back: `miItem.update()`
+    // suspends listening, so a re-entrant updateItem from that write is ignored.
+    if (miActor && miActor.listening && miActor.actor.id === actor.id && item.flags.magicitems?.internal) {
       const miItem = miActor.magicItem(item.id);
       if (miItem) {
         await miItem.updateInternalCharges(item.flags.magicitems?.internal, item);

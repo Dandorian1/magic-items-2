@@ -33,11 +33,10 @@ export class AbstractMagicItemEntry {
   }
 
   async renderSheet() {
-    this.entity().then((entity) => {
-      entity.ownership.default = CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED;
-      const sheet = entity.sheet;
-      sheet.render(true);
-    });
+    // Open read-only via the render option, not by mutating `ownership` in
+    // place — unpersisted ownership writes are fragile under v13 (CHANGELOG F8).
+    const entity = await this.entity();
+    entity.sheet.render({ force: true, editable: entity.isOwner });
   }
 
   entity() {

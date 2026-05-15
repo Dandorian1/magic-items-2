@@ -133,7 +133,6 @@ foundry.js
 /dist
 /package
 /.vite-cache
-/package-lock.json
 /wiki/backups/FoundryVTT-ItemPiles_2024-03-03
 argon-dnd5e-index.js.map
 
