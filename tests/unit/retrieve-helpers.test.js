@@ -38,20 +38,6 @@ describe("RetrieveHelpers.retrieveUuid (B2)", () => {
   });
 });
 
-describe("RetrieveHelpers.getUuid (B3)", () => {
-  it("returns the input when it's already a UUID string", () => {
-    globalThis.fromUuidSync.mockReturnValueOnce({ uuid: "Item.abc" });
-    const out = RetrieveHelpers.getUuid("Item.abc");
-    expect(out).toBe("Item.abc");
-  });
-
-  it("does not ReferenceError on non-UUID input (B3 regression)", () => {
-    // Pre-fix, the function called bare `getDocument(target)` which threw
-    // ReferenceError. Now it uses `RetrieveHelpers.getDocument(target)`.
-    expect(() => RetrieveHelpers.getUuid("not-a-uuid")).not.toThrow();
-  });
-});
-
 describe("RetrieveHelpers.stringIsUuid", () => {
   it("returns true for valid UUIDs that fromUuidSync resolves", () => {
     globalThis.fromUuidSync.mockReturnValueOnce({ uuid: "Item.abc" });

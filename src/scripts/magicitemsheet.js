@@ -247,14 +247,9 @@ export class MagicItemSheet {
       Logger.error(`An item with UUID ${uuid} could not be found. Please verify.`);
       return;
     }
-    // Open the linked item's sheet without mutating its ownership.
-    // The old code patched `ownership.default = LIMITED` in place to
-    // bypass dnd5e's owner-gated sheet render, but in-place ownership
-    // edits aren't persisted and v13's stricter data-prep cycle may
-    // ignore them entirely. Pass `editable: false` so non-owners get a
-    // read-only render; Foundry tolerates that for any document the
-    // current user can at least observe.
-    itemTmp.sheet.render({ force: true, editable: itemTmp.isOwner });
+    // Foundry's permission gating handles read-only — don't add an in-place
+    // `ownership.default` write to coerce it; that was fragile under v13.
+    itemTmp.sheet.render({ force: true });
   }
 
   /**

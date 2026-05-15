@@ -33,10 +33,10 @@ export class AbstractMagicItemEntry {
   }
 
   async renderSheet() {
-    // Open read-only via the render option, not by mutating `ownership` in
-    // place — unpersisted ownership writes are fragile under v13 (CHANGELOG F8).
+    // Foundry's permission gating handles read-only — don't add an in-place
+    // `ownership.default` write to coerce it; that was fragile under v13.
     const entity = await this.entity();
-    entity.sheet.render({ force: true, editable: entity.isOwner });
+    entity.sheet.render({ force: true });
   }
 
   entity() {
