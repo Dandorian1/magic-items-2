@@ -480,20 +480,35 @@ function buildButton(actor, ownedMI, ownedSpell) {
 // Pause Argon's hook-driven refreshes across a magicitems cast cycle.
 //
 // Argon's core registers `createItem`/`updateItem`/`deleteItem` handlers whose
-// guard is `e.parent === this._actor` (where `this` is the Argon main class).
-// The dnd5e binding registers an additional inline `updateItem` handler that
-// guards on `r.parent === ui.ARGON._actor && ui.ARGON.rendered`. Setting
-// `_actor` to null + `rendered` to false makes every one of those guards
-// short-circuit, so the cascade of refreshes triggered by our transient's
-// create/update/delete and the staff's charge-consume updates collapses to
-// a single explicit `argon.refresh()` we fire on resume.
+// guard is `e.parent === this._actor`. The dnd5e binding registers an inline
+// `updateItem` handler whose guard is `r.parent === ui.ARGON._actor && ...`.
+// Both short-circuit on the `_actor` comparison FIRST, so nulling `_actor`
+// alone makes every one of them a no-op — no need to also clobber `rendered`
+// (and we can't anyway: it's a getter on Foundry v13's ApplicationV2 base).
+//
+// `_actor` itself is assigned as a regular property by Argon, but we set it
+// defensively via Object.defineProperty in case a future Argon version
+// promotes it to a getter.
 //
 // Single-pause-at-a-time is fine here — overlapping magicitems casts on the
 // same world are rare; a second concurrent caller gets a no-op resume.
-//
-// Returned `resume` is idempotent — safe to invoke from both the cleanup
-// path and an error-recovery early-return.
+// Returned `resume` is idempotent.
 let _argonPaused = null;
+
+/**
+ *
+ * @param obj
+ * @param key
+ * @param value
+ */
+function setOrDefine(obj, key, value) {
+  try {
+    obj[key] = value;
+  } catch (e) {
+    // Property is a getter — override via defineProperty.
+    Object.defineProperty(obj, key, { value, configurable: true, writable: true });
+  }
+}
 
 /**
  *
@@ -502,17 +517,15 @@ export function pauseArgon() {
   const argon = ui?.ARGON;
   if (!argon) return () => {};
   if (_argonPaused) return () => {}; // already paused; later caller's resume is a no-op
-  _argonPaused = { actor: argon._actor, rendered: argon.rendered };
-  argon._actor = null;
-  argon.rendered = false;
+  _argonPaused = { actor: argon._actor };
+  setOrDefine(argon, "_actor", null);
   let released = false;
   return function resume() {
     if (released || !_argonPaused) return;
     released = true;
     const saved = _argonPaused;
     _argonPaused = null;
-    argon._actor = saved.actor;
-    argon.rendered = saved.rendered;
+    setOrDefine(argon, "_actor", saved.actor);
     try {
       argon.refresh?.();
     } catch (e) {
