@@ -1,3 +1,46 @@
+### 5.0.21
+#### Bug fix — handle Special panel (and any panel with no native spells)
+5.0.20's `derivePanelActivationType` only looked at native spells already in `preparedSpells` and returned null when none existed. The Special panel typically has no native special-cast spells on a Cleric / Wizard / etc., so `preparedSpells` came back empty, the filter never engaged, and magic-item spells leaked into Special's Cast Spell accordion anyway.
+
+Confirmed Argon's dnd5e binding source at offset 52600 of `enhancedcombathud-dnd5e/index.js`:
+
+```js
+{key:"colorScheme",get:function get(){return this.color}}
+```
+
+So `DND5eButtonPanelButton`'s `colorScheme` getter returns the `color` ctor arg. And the binding's action-type config at offset 23800:
+
+```js
+{action:["action"],bonus:["bonus"],reaction:["reaction","reactiondamage","reactionmanual"],free:["special"]}
+```
+
+Cross-referenced with `ArgonComponent.setColorScheme`'s switch (1=bonus-action, 2=free-action, 3=reaction; 0 default = action), gives a deterministic mapping from `colorScheme` to activation type:
+
+```js
+{ 0: "action", 1: "bonus", 2: "special", 3: "reaction" }
+```
+
+`derivePanelActivationType` now has three fallbacks in order:
+  1. Native spell already in `preparedSpells` (most reliable when present)
+  2. `buttonPanelButton.colorScheme` mapped via the table (covers the Special-panel case the user hit, and any panel with no native spells of its activation type)
+  3. Parent panel's sibling buttons (e.g., Channel Divinity / Destroy Undead under Special carry `activation.type === "special"` on their first activity)
+
+So even on a character with no native special spells, the Special panel's Cast Spell button now correctly identifies as "special" via colorScheme=2, the Staff of Healing's action-cast spells don't match, and the filter rejects them. Same logic for any other panel that lacks native spells.
+
+### 5.0.20
+#### Bug fix — Argon spell injection: filter by panel activation type
+User reported: "Staff of healing is showing in several area's Action (Cast Spell), Bonus action (cast spell) and Special" — magic-item spells were duplicated across every action panel's "Cast Spell" accordion regardless of the spell's actual activation type. Staff of Healing's spells (Cure Wounds, Lesser Restoration, Mass Cure Wounds) are all action-cast; they should only appear under the Action panel's Cast Spell, not Bonus Action or Special.
+
+Root cause: `injectMagicItemSpells` added every `OwnedMagicItemSpell` to every `DND5eButtonPanelButton({type: "spell"})` it saw, without checking which main action panel hosted that spell button. Argon's dnd5e binding creates one such ButtonPanelButton per main action panel (Action / Bonus Action / Reaction / Special), each with `preparedSpells` already pre-filtered to spells matching that panel's activation type. We were ignoring that filter.
+
+Fix: derive the panel's intended activation type by reading the first activity's `activation.type` off any native spell already in `preparedSpells`, then filter `ownedSpells` to those whose source-spell first activity matches the same activation type. The magic-items module doesn't store its own activation override on spells (verified — `MagicItem.js` only carries `featAction` for the feat path), so the source spell's activation is the canonical value.
+
+Cold-cache resilience: `fromUuidSync` on a compendium source returns a lite index entry before its full document is loaded; in that window `ownedSpellActivationType` returns null and we fall through to the legacy un-filtered injection so the spell still shows somewhere. The post-warmup `rerunPrepareOnExistingButtons` pass tightens the filter once the cache is hot.
+
+Edge case acknowledged: panels with no native spells (e.g., Special panel on most characters) yield `panelActivationType === null`, so the filter is skipped and magic-item spells still appear there. Uncommon enough not to add a guard; the user can ignore those panels or we can iterate if it becomes a problem in practice.
+
+Not adding magic-item-tab toggles to override the activation type per spell (the user's fallback question). The automatic filter matches the spell's natural activation type, which is what most casters expect. If a future use case needs to surface an action spell in the bonus panel (e.g., a Quickened-style item), we'll add a per-spell override at that point.
+
 ### 5.0.19
 #### Bug fix — actor-scope the rest suppression to avoid party-rest cross-talk
 User asked: "would this cause issues if multiple players use a long rest at once?" Yes. 5.0.18's `dnd5e.preRestCompleted` hook activated `startCastSuppression()` unconditionally for any actor's rest. Two real scenarios broke:

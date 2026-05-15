@@ -275,6 +275,103 @@ function preloadMagicItemSpellSources(mia) {
 }
 
 /**
+ * Read the first activity off a spell's system data, tolerating both the
+ * Map-shaped collection dnd5e 5.x uses at runtime and the plain-object
+ * shape `toObject()` serialises it into.
+ * @param systemData
+ */
+function getFirstActivity(systemData) {
+  const acts = systemData?.activities;
+  if (!acts) return null;
+  if (typeof acts.values === "function") {
+    return acts.values().next?.().value ?? null;
+  }
+  if (Array.isArray(acts)) return acts[0] ?? null;
+  if (typeof acts === "object") return Object.values(acts)[0] ?? null;
+  return null;
+}
+
+// Map between Argon's panel `color` arg and dnd5e activation types.
+// Derived from the dnd5e binding's own action-type config:
+//   { action: ["action"], bonus: ["bonus"],
+//     reaction: ["reaction","reactiondamage","reactionmanual"],
+//     free: ["special"] }
+// and `ArgonComponent.setColorScheme`'s switch (1=bonus-action,
+// 2=free-action, 3=reaction; 0 = default/action).
+const PANEL_COLOR_TO_ACTIVATION = Object.freeze({
+  0: "action",
+  1: "bonus",
+  2: "special",
+  3: "reaction",
+});
+
+/**
+ * Argon's dnd5e binding builds one `DND5eButtonPanelButton({type: "spell"})`
+ * per main action panel (Action / Bonus Action / Reaction / Special), each
+ * pre-filtered to spells whose first activity matches the panel's
+ * activation type. Three fallbacks, in order:
+ *
+ *   1. Any native spell already in `preparedSpells`. Most reliable when
+ *      the player has native spells of that activation type.
+ *   2. `buttonPanelButton.colorScheme` — the `color` ctor arg the binding
+ *      passes per panel (0=action, 1=bonus, 2=special, 3=reaction).
+ *      Critical for the Special panel, which often has no native spells
+ *      on a typical character (Cleric, Wizard, etc.) so (1) returns null.
+ *   3. Parent panel's sibling buttons — fall through and read any item's
+ *      activation.type. Covers exotic configurations where the color
+ *      isn't set as expected.
+ *
+ * Returns null only when none of those paths yield an activation type —
+ * in which case the caller falls through to the legacy un-filtered
+ * behaviour so the user still sees magic-item spells somewhere.
+ * @param buttonPanelButton
+ * @param preparedSpells
+ */
+function derivePanelActivationType(buttonPanelButton, preparedSpells) {
+  if (Array.isArray(preparedSpells)) {
+    for (const group of preparedSpells) {
+      for (const btn of group?.buttons ?? []) {
+        const type = getFirstActivity(btn?.item?.system)?.activation?.type;
+        if (type) return type;
+      }
+    }
+  }
+  const cs = buttonPanelButton?.colorScheme;
+  if (typeof cs === "number" && cs in PANEL_COLOR_TO_ACTIVATION) {
+    return PANEL_COLOR_TO_ACTIVATION[cs];
+  }
+  const parent = buttonPanelButton?._parent;
+  for (const sib of parent?._buttons ?? []) {
+    if (sib === buttonPanelButton) continue;
+    const candidates = [sib?.item, sib?.button1?.item, sib?.button2?.item];
+    for (const item of candidates) {
+      const t = getFirstActivity(item?.system)?.activation?.type;
+      if (t) return t;
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve the source spell for an OwnedMagicItemSpell and return its first
+ * activity's activation type ("action" / "bonus" / "reaction" / "special").
+ * Used to decide whether the spell belongs in a given Argon spell panel.
+ * @param ownedSpell
+ */
+function ownedSpellActivationType(ownedSpell) {
+  const entry = ownedSpell?.item ?? ownedSpell;
+  const uuid = entry?.uuid;
+  if (!uuid) return null;
+  let source;
+  try {
+    source = fromUuidSync(uuid);
+  } catch (e) {
+    return null;
+  }
+  return getFirstActivity(source?.system)?.activation?.type ?? null;
+}
+
+/**
  *
  * @param buttonPanelButton
  * @param preparedSpells
@@ -376,11 +473,32 @@ function injectMagicItemSpells(buttonPanelButton, preparedSpells) {
   const existingItemsWithSpellsLabels = new Set((buttonPanelButton.itemsWithSpells ?? []).map((g) => g.label));
   const existingPreparedLabels = new Set((Array.isArray(preparedSpells) ? preparedSpells : []).map((g) => g.label));
 
+  // Each main action panel (Action / Bonus Action / Reaction / Special)
+  // has its own "Cast Spell" button whose `preparedSpells` was already
+  // filtered to spells matching that panel's activation type. Match our
+  // injected magic-item spells against the same filter so e.g. a Staff
+  // of Healing (action-cast spells) doesn't double-up in the Bonus
+  // Action's Cast Spell accordion. If the panel has no native spells to
+  // derive from, fall through to the legacy un-filtered behaviour so the
+  // user still sees magic-item spells at all — the next
+  // `rerunPrepareOnExistingButtons` pass after compendium-cache warmup
+  // will tighten the filter once a native spell is present.
+  const panelActivationType = derivePanelActivationType(buttonPanelButton, preparedSpells);
+
   const newGroups = [];
   for (const ownedMI of mia.items) {
     if (!ownedMI.active || !ownedMI.visible) continue;
     if (existingItemsWithSpellsLabels.has(ownedMI.name) && existingPreparedLabels.has(ownedMI.name)) continue;
-    const ownedSpells = (ownedMI.ownedEntries ?? []).filter((e) => e.constructor?.name === "OwnedMagicItemSpell");
+    let ownedSpells = (ownedMI.ownedEntries ?? []).filter((e) => e.constructor?.name === "OwnedMagicItemSpell");
+    if (panelActivationType) {
+      ownedSpells = ownedSpells.filter((sp) => {
+        const t = ownedSpellActivationType(sp);
+        // Keep the spell when we can't yet resolve its source (compendium
+        // cache cold) so it shows somewhere; the post-warmup re-prepare
+        // pass will move it to the right panel.
+        return t === null || t === panelActivationType;
+      });
+    }
     if (!ownedSpells.length) continue;
 
     const buttons = [];
