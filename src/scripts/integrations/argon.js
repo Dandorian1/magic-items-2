@@ -477,6 +477,50 @@ function buildButton(actor, ownedMI, ownedSpell) {
   }
 }
 
+// Pause Argon's hook-driven refreshes across a magicitems cast cycle.
+//
+// Argon's core registers `createItem`/`updateItem`/`deleteItem` handlers whose
+// guard is `e.parent === this._actor` (where `this` is the Argon main class).
+// The dnd5e binding registers an additional inline `updateItem` handler that
+// guards on `r.parent === ui.ARGON._actor && ui.ARGON.rendered`. Setting
+// `_actor` to null + `rendered` to false makes every one of those guards
+// short-circuit, so the cascade of refreshes triggered by our transient's
+// create/update/delete and the staff's charge-consume updates collapses to
+// a single explicit `argon.refresh()` we fire on resume.
+//
+// Single-pause-at-a-time is fine here — overlapping magicitems casts on the
+// same world are rare; a second concurrent caller gets a no-op resume.
+//
+// Returned `resume` is idempotent — safe to invoke from both the cleanup
+// path and an error-recovery early-return.
+let _argonPaused = null;
+
+/**
+ *
+ */
+export function pauseArgon() {
+  const argon = ui?.ARGON;
+  if (!argon) return () => {};
+  if (_argonPaused) return () => {}; // already paused; later caller's resume is a no-op
+  _argonPaused = { actor: argon._actor, rendered: argon.rendered };
+  argon._actor = null;
+  argon.rendered = false;
+  let released = false;
+  return function resume() {
+    if (released || !_argonPaused) return;
+    released = true;
+    const saved = _argonPaused;
+    _argonPaused = null;
+    argon._actor = saved.actor;
+    argon.rendered = saved.rendered;
+    try {
+      argon.refresh?.();
+    } catch (e) {
+      Logger.warn(`Argon resume refresh failed: ${e?.message}`, false, e);
+    }
+  };
+}
+
 Hooks.on("argonInit", () => {
   if (game.system?.id !== "dnd5e") return;
   if (!game.modules.get("enhancedcombathud-dnd5e")?.active) return;
