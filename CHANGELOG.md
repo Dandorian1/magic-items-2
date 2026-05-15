@@ -1,3 +1,28 @@
+### 5.0.4
+#### Cleanup & hardening — code-review findings
+A focused cleanup patch from a top-down code review. No end-user runtime behavior changes apart from the two latent-bug fixes below — the rest is correctness hardening, dead-code removal, and dev-surface tidy-up.
+
+#### Latent bug fixes
+* **`OwnedMagicItem.update()` could permanently wedge the actor listener.** The flag write-back chained `resumeListening()` off `.then()`, so if `item.update()` ever rejected, listening stayed suspended for the rest of the session and the magicitems sheet stopped tracking changes. Switched to `.finally()`.
+* **`module.js`'s `updateItem` internal-charges branch was missing the `listening` re-entrancy guard** its sibling branch has. `update()` suspends listening precisely so the module's own write-back doesn't re-trigger the hook — but the internal-charges branch ran regardless, so a write-back re-entered `updateInternalCharges()` + `update()`. Added the same `miActor.listening && miActor.actor.id === actor.id` guard.
+
+#### Code cleanup
+* **`foundry-compat.js` — `RollImpl` / `ChatMessageImpl` resolved too early.** They were `const`, capturing the bare core `Roll` / `ChatMessage` at module-import time — before dnd5e's `init` hook populates `CONFIG.Dice.rolls` / `CONFIG.ChatMessage.documentClass`. Changed to `export let` with a `Hooks.once("setup")` re-resolution; live bindings propagate the system classes to importers.
+* **Removed the dead `runMacro` cluster from `lib.js`.** `runMacro` / `runMacroOnExplicitActor` / `getOwnedCharacters` / `getUserCharacter` had no consumers anywhere in the module (`runMacro` was even infinitely self-recursive), and still referenced the v13-removed `CONST.DOCUMENT_PERMISSION_LEVELS`. Deleted the cluster and the imports it orphaned.
+* **`AbstractMagicItemEntry.renderSheet()` no longer mutates `ownership` in place.** Writing `entity.ownership.default` on a prepared document without persisting is fragile under v13's stricter data-prep cycle. Now opens the sheet read-only via the `render({ force: true, editable })` option instead.
+* **`module.js` — `Macro.create`'s stale `{ displaySheet: false }` option** renamed to the current `{ renderSheet: false }`.
+* **`package.json` — `prepare` script** `husky install` → `husky` (the former is deprecated in husky 9).
+* **`eslint.config.js` — dropped stale `ignores` entries** for paths that no longer exist (`src/assets`, `src/lang`, `src/**/*.svelte`).
+* **`tests/setup.js` — tightened the Foundry mock to the real v13 surface.** Dropped the `CONST.DOCUMENT_PERMISSION_LEVELS` mock (removed in real v13) and the `foundry.applications.handlebars.registerHelper` mock (that namespace is a v14 surface) — leaving the latter out makes the helper-registration path exercise the same global-`Handlebars` fallback v13 actually uses.
+
+#### Build / CI
+* **`package-lock.json` is now committed** (previously gitignored). `ci.yml` and `release-creation.yml` switched from `npm install` to `npm ci` for reproducible, lockfile-strict installs, and `ci.yml` re-enabled the `setup-node` npm cache.
+
+#### Deferred
+* `OwnedMagicItemSpell` / `OwnedMagicItemFeat` still write the v12-deprecated `flags.core.sourceId` on transient cast items. Swapping it for `_stats.compendiumSource` touches the hot cast path and needs a live smoke-test (confirm the per-cast deprecation warning, verify midi-qol / chris-premades source-tracing still resolves) — held for a follow-up patch rather than bundled into this cleanup.
+
+Verified: `npm run lint` clean, full vitest suite green, `vite build` + bundle-parse check pass. Live smoke-test on the VPS world is the final gate per `CONTRIBUTING.md`.
+
 ### 5.0.3
 #### Bug fix — `updateInternalCharges()` dnd5e 5.x `system.uses` schema
 Completes the 5.0.2 internal-charges fix. `MagicItem.updateInternalCharges()` — called by `module.js`'s second `updateItem` hook on *every* update to an internal-charges item, then persisted to the flags via `update()` — read the pre-5.x `system.uses.per` field (gone in dnd5e 5.x), always hit its else branch, and wrote `charges: 0, uses: 0` back to the flags. That clobbered the 5.0.2 constructor snapshot on every update. Rewrote it for the dnd5e 5.x schema: `max` resolves to a number, `value` is a derived getter (`max - spent`), and `recovery` is an array of `{period, type, formula}`. `chargesTypeCompatible()` likewise rewritten to read a 5.x recovery profile. Internal-charges magic items now show their real charge count in the dnd5e inventory, the magicitems sheet section, and the Argon HUD consistently.

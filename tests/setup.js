@@ -205,8 +205,9 @@ globalThis.foundry = {
       },
     },
     handlebars: {
+      // No `registerHelper` — that namespace lands in v14, not v13. Leaving it
+      // out makes module.js exercise the global-Handlebars fallback v13 uses.
       renderTemplate: vi.fn(() => Promise.resolve("<div></div>")),
-      registerHelper: vi.fn(),
     },
     ux: {
       DragDrop: { implementation: class FakeDragDrop {} },
@@ -289,7 +290,6 @@ globalThis.ui = {
 // ---- CONST ------------------------------------------------------------------
 globalThis.CONST = {
   DOCUMENT_OWNERSHIP_LEVELS: { NONE: 0, LIMITED: 1, OBSERVER: 2, OWNER: 3 },
-  DOCUMENT_PERMISSION_LEVELS: { NONE: 0, LIMITED: 1, OBSERVER: 2, OWNER: 3 },
 };
 
 // ---- dnd5e namespace -------------------------------------------------------

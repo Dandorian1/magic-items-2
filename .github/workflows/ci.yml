@@ -15,10 +15,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: "npm"
 
-      # package-lock.json is gitignored; npm install (not ci) and no cache
-      # (setup-node's npm cache also needs a lockfile to compute the key).
-      - run: npm install
+      - run: npm ci
 
       - name: Lint (zero warnings)
         run: npm run lint -- --max-warnings 0
