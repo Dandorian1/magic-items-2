@@ -521,7 +521,6 @@ function installSurgicalSetUses() {
    * Surgical reimplementation of AccordionPanelCategory._setUses.
    * `this` is the AccordionPanelCategory instance at call time.
    */
-  // eslint-disable-next-line jsdoc/require-jsdoc
   function surgicalSetUses() {
     const uses = this.uses;
     if (!uses || !Number.isNumeric(uses.value)) return;
