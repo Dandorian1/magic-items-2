@@ -1,3 +1,11 @@
+### 5.0.22
+#### UI polish — align "Destroy Item at 0 charges" controls with the rest of the magic-item tab
+User reported the destroy row's controls weren't visually aligned with the other rows. Cause: `.magicitems-destroy-controls` used a 4-column grid (`22px 1fr 1fr 0.75fr`) that reserved a track for the hidden DC input. When `destroyCheck === "d2"`, the DC input has the `hidden` class (`display: none`) but the grid template still allocates its 0.75fr track, creating an empty gap on the right and making the visible controls hug the left of the right column.
+
+Every other row in the tab right-aligns its controls inside the right column — toggle rows via `.magicitems-field--toggle .magicitems-control { justify-content: end }`, the activation row via `.magicitems-inline-controls { justify-content: end }`.
+
+Fix: switch `.magicitems-destroy-controls` from grid to flex with `justify-content: end`. Hidden items take no space, so the visible checkbox + dropdowns (+ optional DC input when d3 is selected) sit flush against the right edge of the right column, matching the other rows' visual rhythm. Added `flex-wrap: wrap` so the row degrades gracefully on narrow item sheets.
+
 ### 5.0.21
 #### Bug fix — handle Special panel (and any panel with no native spells)
 5.0.20's `derivePanelActivationType` only looked at native spells already in `preparedSpells` and returned null when none existed. The Special panel typically has no native special-cast spells on a Cleric / Wizard / etc., so `preparedSpells` came back empty, the filter never engaged, and magic-item spells leaked into Special's Cast Spell accordion anyway.

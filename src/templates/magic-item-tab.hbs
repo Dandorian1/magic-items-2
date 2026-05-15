@@ -98,14 +98,29 @@
   }
 
   .magicitems-destroy-controls {
-    display: grid;
-    grid-template-columns: 22px minmax(120px, 1fr) minmax(120px, 1fr) minmax(80px, 0.75fr);
+    display: flex;
+    justify-content: end;
+    align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
   }
 
   .magicitems-destroy-controls > input[type="checkbox"] {
+    flex: 0 0 auto;
     align-self: center;
-    justify-self: center;
+  }
+
+  .magicitems-destroy-controls > select {
+    flex: 0 1 auto;
+    inline-size: auto;
+    min-inline-size: 130px;
+  }
+
+  .magicitems-destroy-controls > input[type="text"] {
+    flex: 0 1 auto;
+    inline-size: auto;
+    min-inline-size: 70px;
+    max-inline-size: 90px;
   }
 
   .magicitems-radio-controls {
