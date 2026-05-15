@@ -173,33 +173,35 @@ export class AbstractOwnedMagicItemEntry {
   }
 
   async applyActiveEffects(item) {
-    canvas.tokens.controlled?.forEach((token) => {
+    for (const token of canvas.tokens.controlled ?? []) {
       if (!token) {
         Logger.warn("No token selected", true);
-        return;
+        continue;
       }
-      let actor = token.actor;
-
-      item?.effects.toObject()?.forEach(async (effect) => {
-        if (!game.user.isGM && !actor?.isOwner) {
-          return;
-        }
-        const existingEffect = actor?.effects?.find((e) => e.origin === item.uuid);
-        if (existingEffect) {
-          existingEffect.update({ disabled: !existingEffect.disabled });
-          return;
-        }
-        effect = foundry.utils.mergeObject(effect, {
-          disabled: false,
-          transfer: false,
-          origin: item.uuid,
-        });
-        const ae = await ActiveEffect.implementation.create(effect, { parent: actor });
-        if (!ae) {
-          Logger.warn(game.i18n.localize("MAGICITEMS.ToggleActiveEffectError"), true);
-        }
-      });
-    });
+      const actor = token.actor;
+      const effects = item?.effects.toObject() ?? [];
+      await Promise.all(
+        effects.map(async (effect) => {
+          if (!game.user.isGM && !actor?.isOwner) {
+            return;
+          }
+          const existingEffect = actor?.effects?.find((e) => e.origin === item.uuid);
+          if (existingEffect) {
+            await existingEffect.update({ disabled: !existingEffect.disabled });
+            return;
+          }
+          effect = foundry.utils.mergeObject(effect, {
+            disabled: false,
+            transfer: false,
+            origin: item.uuid,
+          });
+          const ae = await ActiveEffect.implementation.create(effect, { parent: actor });
+          if (!ae) {
+            Logger.warn(game.i18n.localize("MAGICITEMS.ToggleActiveEffectError"), true);
+          }
+        }),
+      );
+    }
   }
 
   showLeftChargesMessage() {

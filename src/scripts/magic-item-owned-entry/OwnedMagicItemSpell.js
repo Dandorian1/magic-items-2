@@ -353,7 +353,7 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
       if (chatData) {
         await this.consume(consumption);
         if (!this.magicItem.isDestroyed) {
-          this.magicItem.update();
+          await this.magicItem.update();
         }
       }
 

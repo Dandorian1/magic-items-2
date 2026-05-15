@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { OwnedMagicItem } from "../../src/scripts/magic-item/OwnedMagicItem.js";
 import { makeActor, makeMagicItem } from "../helpers/factories.js";
 
@@ -70,5 +70,43 @@ describe("OwnedMagicItem visibility + active", () => {
     globalThis.game.settings.set("magicitems", "identifiedOnly", false);
     const omi = makeOMI();
     expect(omi.visible).toBe(true);
+  });
+});
+
+describe("OwnedMagicItem.update — async + resumes listening on both paths (#7)", () => {
+  // Regression: pre-5.0.4, `.then(resumeListening)` meant a rejected
+  // `item.update()` left listening stuck false forever. 5.0.4 switched to
+  // `.finally()`; 5.0.6 made the method `async` with `try/catch/finally` so
+  // callers can await and a write failure still resumes listening (no wedge).
+  function makeListeningHarness() {
+    let listening = false;
+    const actor = makeActor({ name: "Erlen" });
+    const item = makeMagicItem({ name: "Staff", uses: 5, charges: 10 });
+    const mia = {
+      suspendListening() {
+        listening = false;
+      },
+      resumeListening() {
+        listening = true;
+      },
+    };
+    const omi = new OwnedMagicItem(item, actor, mia, item.flags.magicitems);
+    return { omi, item, isListening: () => listening };
+  }
+
+  it("resumes listening after a successful flag write", async () => {
+    const { omi, item, isListening } = makeListeningHarness();
+    item.update = vi.fn().mockResolvedValue(undefined);
+    await omi.update();
+    expect(item.update).toHaveBeenCalledOnce();
+    expect(isListening()).toBe(true);
+  });
+
+  it("resumes listening even when the flag write rejects (no wedge)", async () => {
+    const { omi, item, isListening } = makeListeningHarness();
+    item.update = vi.fn().mockRejectedValue(new Error("write failed"));
+    await omi.update();
+    expect(item.update).toHaveBeenCalledOnce();
+    expect(isListening()).toBe(true);
   });
 });

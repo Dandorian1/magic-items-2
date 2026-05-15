@@ -1,3 +1,20 @@
+### 5.0.6
+#### Refactor — Phase 2 of post-5.0.4 cleanup
+Low-risk live-code cleanups from the structural code review: async/await rewrites, fire-and-forget async-`forEach` fixes, and a hardened `update()`. No user-facing runtime behavior change, but several internal sequencing guarantees are now real.
+
+#### Code cleanup
+* **`AbstractMagicItemEntry.entity()` / `data()` — rewritten as `async`/`await` (#3).** The old `entity()` was a 38-line explicit-Promise-constructor anti-pattern with three bare `reject()` calls that passed no reason, so `catch` handlers got `undefined`. The new version is linear `async`/`await` and rejects with descriptive `Error`s (e.g. `"MagicItem entry not found in pack <id> (<name>)"`). All callers already `await` it; the contract is otherwise unchanged.
+* **`OwnedMagicItem.update()` is now `async` with `try/catch/finally` (#7).** Pairs naturally with the 5.0.4 `.finally()` listener-wedge fix: callers can now `await` the flag write-back, and a rejected `item.update()` is caught + logged (`Logger.warn`) so the rejection no longer dangles as an unhandled Promise. `resumeListening()` is still guaranteed on both success and failure paths. Four callers updated to `await`: `module.js:533` (the `updateItem` hook's internal-charges branch), `OwnedMagicItem.consume → doRecharge` self-call, `OwnedMagicItemFeat.roll` post-use, `OwnedMagicItemSpell.roll` post-use.
+* **Four fire-and-forget `forEach(async …)` sites fixed (#4).** Replaced with `await Promise.all(arr.map(…))` (parallel) or `for…of` (sequential), so the outer function actually awaits the inner work:
+  * `MagicItemActor.fireChange()` — listeners now awaited, so `await fireChange()` truly settles before returning.
+  * `API.execActorShortRest` / `execActorLongRest` — rest application across an actor's magic items now awaited (was previously returning before per-item work completed).
+  * `AbstractOwnedMagicItemEntry.applyActiveEffects` — outer token loop converted to `for…of`; inner per-effect application now `await Promise.all`-mapped. Also added `await` to the existing-effect toggle update.
+
+#### Tests
+* New regression tests in `tests/unit/owned-magic-item.test.js`: pin `update()` resumes listening on both success and failure paths (locks in the 5.0.4 wedge fix + the new `try/catch/finally`).
+
+Verified: `npm run lint` clean, **113/113** vitest suite green, `vite build` + bundle-parse pass.
+
 ### 5.0.5
 #### Refactor — Phase 1 of post-5.0.4 cleanup
 Zero-risk dead-code removal and an inert-option fix from a structural code review. No runtime behavior change.

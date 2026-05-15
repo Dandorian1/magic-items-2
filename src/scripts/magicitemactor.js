@@ -72,7 +72,7 @@ export class MagicItemActor {
    * Notify listeners of changes.
    */
   async fireChange() {
-    this.listeners.forEach(async (listener) => listener());
+    await Promise.all(this.listeners.map((listener) => listener()));
   }
 
   /**
