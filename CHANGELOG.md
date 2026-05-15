@@ -1,3 +1,7 @@
+### 5.0.8
+#### Bug fix — eliminate the Argon HUD blink on every cast
+Casting a spell from a magic item caused the Argon Enhanced Combat HUD to visibly flicker, because the cast flow creates a transient embedded spell (`createEmbeddedDocuments`) and deletes it post-cast (`deleteEmbeddedDocuments`), and Argon re-renders its panel on both `createItem` and `deleteItem` Foundry hooks. Per Argon's own wiki (theripper93.com), its visibility filter is *"first activity's `activation.type` ∈ {action, bonus, reaction, special}"* — anything else is skipped entirely. Now `buildSpellData()` blanks `activation.type` to `""` on every activity of the transient before `createEmbeddedDocuments`, so Argon's filter excludes it and no re-render fires. `consume: false` was already suppressing action-economy gating on the cast, so blanking the activation type has no effect on dnd5e's workflow — the cast still produces the same chat card, damage/healing rolls, and effect application.
+
 ### 5.0.7
 #### Bug fixes — upcast dialog + chat card styling + upcast scaling
 Three bugs that surfaced during VPS smoke-testing of 5.0.6, all in the cast/upcast flow.

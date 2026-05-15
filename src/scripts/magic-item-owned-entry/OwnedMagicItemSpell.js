@@ -143,6 +143,19 @@ function buildSpellData(sourceItem, entry, magicItem) {
     }
   }
 
+  // Blank `activation.type` on every activity so Argon (the Enhanced Combat
+  // HUD) doesn't flicker on every cast. Per Argon's wiki, its visibility
+  // filter is "first activity's `activation.type` ∈ {action, bonus, reaction,
+  // special}" — anything else makes Argon skip the item entirely. Without
+  // this, `createEmbeddedDocuments` triggers an Argon re-render for the new
+  // transient, and `deleteEmbeddedDocuments` triggers another at cleanup,
+  // bracketing every cast with a visible blink. `consume: false` already
+  // suppresses action-economy gating, so blanking activation.type has no
+  // effect on dnd5e's cast workflow.
+  for (const a of iterActivities(data.system)) {
+    if (a?.activation) a.activation.type = "";
+  }
+
   data = foundry.utils.mergeObject(data, {
     "system.preparation": { mode: "magicitems" },
     "flags.core": { sourceId: entry.uuid },
