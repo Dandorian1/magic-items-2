@@ -302,6 +302,19 @@ export class OwnedMagicItemSpell extends AbstractOwnedMagicItemEntry {
 
       let spell = transient;
 
+      // Tell dnd5e to treat this as a fixed-level cast (spell-scroll style).
+      // dnd5e 5.x's `Activity._prepareUsageConfig` reads `flags.dnd5e.spellLevel`
+      // and routes the leveling-flag branch — `_prepareUsageScaling` then
+      // computes `usageConfig.scaling = value - base`, so damage activities
+      // apply the per-level scaling formula the right number of times.
+      // Without this flag the `usage.scaling` we pass below gets overwritten
+      // to `false` for non-spell-slot casts, and nothing scales.
+      if (upcastLevel !== spell.system.level) {
+        await spell.update({
+          "flags.dnd5e.spellLevel": { value: upcastLevel, base: spell.system.level },
+        });
+      }
+
       const itemUseConfiguration = { consume: false };
 
       if (

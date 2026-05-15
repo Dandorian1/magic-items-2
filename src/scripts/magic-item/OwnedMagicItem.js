@@ -297,9 +297,9 @@ export class OwnedMagicItem extends MagicItem {
 
   formatMessage(msg) {
     return `
-            <div class="dnd5e chat-card item-card">
+            <div class="dnd5e2 chat-card item-card">
                 <header class="card-header flexrow">
-                    <img src="${this.img}" title="Palla di Fuoco" width="36" height="36" />
+                    <img src="${this.img}" title="${this.name}" width="36" height="36" />
                     <h3 class="item-name">${this.name}</h3>
                 </header>
 

@@ -20,7 +20,12 @@ export class MagicItemUpcastDialog {
 
     return foundry.applications.api.DialogV2.wait({
       window: { title: `${magicItem.name} > ${item.name}: Spell Configuration` },
-      classes: ["dnd5e", "dialog"],
+      // `dnd5e2` brings v2 form-field styling so the inputs render readably.
+      // The marker class `magicitems-upcast-dialog` lets `magicitems.css`
+      // override the default v2 parchment dialog background with the dark
+      // panel theme the v2 character/item sheets use (the parchment look
+      // is dnd5e's default for chat cards, not for the sheet aesthetic).
+      classes: ["dnd5e2", "dialog", "magicitems-upcast-dialog"],
       content: html,
       buttons: [
         {

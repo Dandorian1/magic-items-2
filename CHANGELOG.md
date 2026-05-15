@@ -1,3 +1,13 @@
+### 5.0.7
+#### Bug fixes — upcast dialog + chat card styling + upcast scaling
+Three bugs that surfaced during VPS smoke-testing of 5.0.6, all in the cast/upcast flow.
+
+* **Upcast dialog inputs were unreadable.** `MagicItemUpcastDialog` was tagged with the v1 `dnd5e` class, so dnd5e 5.x's v2 dark-theme form styling didn't apply and the dropdown/consumption text rendered near-black on the dark dialog background. Switched the class to `dnd5e2 dialog magicitems-upcast-dialog` and added scoped CSS that overrides the default v2 *parchment* dialog background with the dark-panel look the v2 character/item sheets use. The marker class scopes the override so we don't restyle every `.dnd5e2.dialog` Foundry surfaces.
+* **`OwnedMagicItem.formatMessage()` chat messages used v1 `dnd5e` styling** while everything else in dnd5e 5.x renders v2. The "Erlen takes a long rest / Recovery / Staff of Healing Uses +5" cards in chat stood out as parchment cards in a sea of v2 dark cards. Switched to `dnd5e2 chat-card item-card`. Also dropped a hardcoded `title="Palla di Fuoco"` (a stray Italian "Fireball" tooltip on every magicitems chat card's icon) — now uses the actual item name.
+* **Upcasting a spell from a magic item did nothing to the damage/healing roll.** Casting Cure Wounds at 4th level still produced 1d8 + mod instead of 4d8 + mod. Root cause: dnd5e 5.x's `Activity._prepareUsageConfig` overwrites `usageConfig.scaling` to `false` for non-spell-slot casts unless either (a) the activity is consuming a spell slot or (b) `flags.dnd5e.spellLevel = { value, base }` is set on the item (the spell-scroll convention). We pass `scaling: upcastLevel - baseLevel` but it was getting clobbered. Fix: when materialising the transient, set `flags.dnd5e.spellLevel = { value: upcastLevel, base: spell.system.level }` before calling `.use()`. dnd5e's `_prepareUsageScaling` then sets `usageConfig.scaling = value - base` and the activity damage formulas apply the per-level scaling the right number of times.
+
+Verified: `npm run lint` clean, **113/113** vitest suite green, `vite build` + bundle-parse pass.
+
 ### 5.0.6
 #### Refactor — Phase 2 of post-5.0.4 cleanup
 Low-risk live-code cleanups from the structural code review: async/await rewrites, fire-and-forget async-`forEach` fixes, and a hardened `update()`. No user-facing runtime behavior change, but several internal sequencing guarantees are now real.
