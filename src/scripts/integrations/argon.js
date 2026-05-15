@@ -519,7 +519,32 @@ export function pauseArgon() {
   if (_argonPaused) return () => {}; // already paused; later caller's resume is a no-op
   _argonPaused = { actor: argon._actor };
   setOrDefine(argon, "_actor", null);
-  Logger.debug(`magicitems: pauseArgon — _actor was ${_argonPaused.actor?.name}, now ${argon._actor}`);
+  console.log(
+    `[magicitems] pauseArgon: _actor was=${_argonPaused.actor?.name ?? "(none)"}, now=${argon._actor}, ARGON.rendered=${argon.rendered}`,
+  );
+  // Instrument Argon's panel-refresh entry points so we can see what's
+  // actually firing during a cast. The hook handlers should all
+  // short-circuit while `_actor` is null — if any of them log a
+  // "matches=true" line while paused, we've missed a code path.
+  if (!argon.__miInstrumented) {
+    argon.__miInstrumented = true;
+    for (const m of ["_onCreateItem", "_onUpdateItem", "_onDeleteItem", "_onUpdateActor"]) {
+      const orig = argon[m];
+      if (typeof orig !== "function") continue;
+      argon[m] = function (e) {
+        const target = m === "_onUpdateActor" ? e : e?.parent;
+        const matches = target === this._actor;
+        const fired = matches && this._actor !== null;
+        if (fired || _argonPaused) {
+          console.log(
+            `[magicitems] Argon.${m}: e=${e?.name ?? e?.constructor?.name}, parent=${e?.parent?.name}, this._actor=${this._actor?.name ?? "(null)"}, matches=${matches}, paused=${!!_argonPaused}, willRun=${fired}`,
+          );
+        }
+        return orig.call(this, e);
+      };
+    }
+    console.log("[magicitems] instrumented Argon hook handlers");
+  }
   let released = false;
   return function resume() {
     if (released || !_argonPaused) return;
@@ -527,13 +552,12 @@ export function pauseArgon() {
     const saved = _argonPaused;
     _argonPaused = null;
     setOrDefine(argon, "_actor", saved.actor);
-    Logger.debug(`magicitems: resumeArgon — _actor restored to ${argon._actor?.name}`);
+    console.log(`[magicitems] resumeArgon: restored _actor to ${argon._actor?.name}`);
     // No catch-up render — every render method on the panel
     // (`argon.refresh`, accordion `setUses`, full button iteration) ends up
     // re-rendering the entire spell panel, which is the visible flash.
-    // The next natural updateItem / updateActor (next cast, next rest,
-    // next anything) will fire Argon's normal hooks and bring pip counts
-    // current. Brief staleness is preferable to a guaranteed flash.
+    // The next natural updateItem / updateActor will fire Argon's normal
+    // hooks and bring pip counts current. Brief staleness > guaranteed flash.
   };
 }
 

@@ -1,3 +1,7 @@
+### 5.0.13
+#### Diagnostic build — instrument Argon hook handlers to find the flash source
+After 5.0.11/5.0.12, casting still produces a full-panel flash even though `_actor` is being nulled and no catch-up render runs. Either the `_actor = null` write isn't sticking, or there's a render path I haven't accounted for. To diagnose: `console.log` lines at `proceed()` start, `pauseArgon`, and `resumeArgon` (so we know the cast path runs through our code), plus a wrap of Argon's `_onCreateItem` / `_onUpdateItem` / `_onDeleteItem` / `_onUpdateActor` that logs each call with `parent`, `this._actor`, `matches`, `paused`, and `willRun`. The next cast will print the full trace — if anything logs `willRun=true` while paused, that's our culprit. Will be removed once root-caused.
+
 ### 5.0.12
 #### Bug fix — spell panel still flashed on cast (every catch-up path was heavy)
 5.0.11 swapped the bulk `argon.refresh()` for what I thought was a targeted catch-up: `accordionPanelCategories.forEach(c => c.setUses())` + `portrait.refresh()`. **It wasn't targeted enough.** `setUses()` iterates every spell-slot category (Staff of Healing accordion, Innate Spellcasting, Cantrip, 1st-5th Level slots) and re-renders each one's pip strip + spell-icon grid — that's the full-panel flash users still saw.
