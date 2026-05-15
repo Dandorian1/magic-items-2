@@ -526,10 +526,16 @@ export function pauseArgon() {
     const saved = _argonPaused;
     _argonPaused = null;
     setOrDefine(argon, "_actor", saved.actor);
+    // Targeted catch-up — don't `argon.refresh()`, which would re-render
+    // every itemButton on the HUD in one pass (visible as a spell-icon
+    // flash). The state we actually need to reflect post-cast is just the
+    // accordion pip counts (charges) and the portrait's action tracker.
     try {
-      argon.refresh?.();
+      const cats = saved.actor ? saved.actor.apps && argon.accordionPanelCategories : argon.accordionPanelCategories;
+      cats?.forEach?.((c) => c.setUses?.());
+      argon.components?.portrait?.refresh?.();
     } catch (e) {
-      Logger.warn(`Argon resume refresh failed: ${e?.message}`, false, e);
+      Logger.warn(`Argon catch-up refresh failed: ${e?.message}`, false, e);
     }
   };
 }
